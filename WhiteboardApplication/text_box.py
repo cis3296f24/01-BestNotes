@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QFont, QPen, QColor, QBrush
 from PySide6.QtCore import Qt, QPointF, QRectF
-from resize_handles import ResizeHandle
+from WhiteboardApplication.resize_handles import ResizeHandle
 
 class TextBox(QGraphicsTextItem):
     def __init__(self):

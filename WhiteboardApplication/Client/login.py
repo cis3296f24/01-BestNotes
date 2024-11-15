@@ -30,7 +30,6 @@ class LoginWindow(QWidget):
         palette.setBrush(QPalette.Window, gradient)
         self.setPalette(palette)
 
-
         layout = QVBoxLayout()
 
         # Username Section

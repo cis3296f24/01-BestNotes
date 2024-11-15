@@ -340,4 +340,3 @@ class Ui_MainWindow(object):
         self.menuHelp.setTitle(QCoreApplication.translate("MainWindow", u"Help", None))
         self.tb_toolbar_main_window.setWindowTitle(QCoreApplication.translate("MainWindow", u"toolBar", None))
     # retranslateUi
-

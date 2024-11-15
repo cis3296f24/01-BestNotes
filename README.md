@@ -8,10 +8,10 @@ that allows the user to type their notes, which is easily moveable through the s
 The notebooks have an autosave feature that saves these notebooks to the user’s devices. 
 This program also has a collaboration feature that allows users to work together on a notebook. 
 
-![current image](currentUI.png)
+![image](https://github.com/user-attachments/assets/32b973fa-7ff2-471e-81f0-33bcd8a35adf)
 
 # How to run
-- Download and run the main.exe file from the latest [release](https://github.com/cis3296f24/01-BestNotes/releases/tag/first).
+- Download and run the main.exe file from the latest [release](https://github.com/cis3296f24/01-BestNotes/releases).
 
 # How to build
 [BestNotes Project Board](https://github.com/orgs/cis3296f24/projects/94/)

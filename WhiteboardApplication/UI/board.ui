@@ -26,7 +26,7 @@
    <property name="styleSheet">
     <string notr="true"/>
    </property>
-   <layout class="QHBoxLayout" name="horizontalLayout" stretch="94,0,0">
+   <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,94,0,0">
     <property name="spacing">
      <number>0</number>
     </property>
@@ -39,6 +39,587 @@
     <property name="bottomMargin">
      <number>0</number>
     </property>
+    <item>
+     <widget class="QWidget" name="w_Tools" native="true">
+      <property name="maximumSize">
+       <size>
+        <width>50</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>25</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QPushButton" name="pb_Cursor">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true"/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/cursor.png</normaloff>:/Tools/cursor.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="tb_Pen">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QToolButton {
+	border: none;
+	background: transparent;
+}
+
+QToolButton:hover {
+	background-color: rgb(141, 200, 216);
+	border-radius: 15px;
+}</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/pen.png</normaloff>:/Tools/pen.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::ToolButtonPopupMode::DelayedPopup</enum>
+         </property>
+         <property name="toolButtonStyle">
+          <enum>Qt::ToolButtonStyle::ToolButtonIconOnly</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::ArrowType::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="tb_Highlighter">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="layoutDirection">
+          <enum>Qt::LayoutDirection::LeftToRight</enum>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QToolButton {
+	border: none;
+	background: transparent;
+}
+
+QToolButton:hover {
+	background-color: rgb(141, 200, 216);
+	border-radius: 15px;
+}</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/highlighter.png</normaloff>:/Tools/highlighter.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::ToolButtonPopupMode::DelayedPopup</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::ArrowType::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="tb_Line">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QToolButton {
+	border: none;
+	background: transparent;
+}
+
+QToolButton:hover {
+	background-color: rgb(141, 200, 216);
+	border-radius: 15px;
+}</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/line.png</normaloff>:/Tools/line.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::ToolButtonPopupMode::DelayedPopup</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::ArrowType::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="tb_Select">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QToolButton {
+	border: none;
+	background: transparent;
+}
+
+QToolButton:hover {
+	background-color: rgb(141, 200, 216);
+	border-radius: 15px;
+}</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/selection.png</normaloff>:/Tools/selection.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::ToolButtonPopupMode::DelayedPopup</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::ArrowType::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pb_Eraser">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/eraser.png</normaloff>:/Tools/eraser.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pb_Text_Button">
+         <property name="mouseTracking">
+          <bool>true</bool>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/text.png</normaloff>:/Tools/text.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="tb_Text">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QToolButton {
+	border: none;
+	background: transparent;
+}
+
+QToolButton:hover {
+	background-color: rgb(141, 200, 216);
+	border-radius: 15px;
+}</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/text.png</normaloff>:/Tools/text.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="tb_Shapes">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QToolButton {
+	border: none;
+	background: transparent;
+}
+
+QToolButton:hover {
+	background-color: rgb(141, 200, 216);
+	border-radius: 15px;
+}</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/shapes.png</normaloff>:/Tools/shapes.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::ToolButtonPopupMode::DelayedPopup</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::ArrowType::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="tb_Images">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QToolButton {
+	border: none;
+	background: transparent;
+}
+
+QToolButton:hover {
+	background-color: rgb(141, 200, 216);
+	border-radius: 15px;
+}</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/image.png</normaloff>:/Tools/image.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::ToolButtonPopupMode::DelayedPopup</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::ArrowType::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="tb_Videos">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QToolButton {
+	border: none;
+	background: transparent;
+}
+
+QToolButton:hover {
+	background-color: rgb(141, 200, 216);
+	border-radius: 15px;
+}</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/video.png</normaloff>:/Tools/video.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::ToolButtonPopupMode::DelayedPopup</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::ArrowType::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDial" name="dial">
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>60</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pb_Undo">
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/undo.png</normaloff>:/Tools/undo.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pb_Redo">
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="../../Icons/Icons.qrc">
+           <normaloff>:/Tools/redo.png</normaloff>:/Tools/redo.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>25</width>
+           <height>25</height>
+          </size>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="minimumSize">
@@ -87,7 +668,7 @@ QTabBar{
       <property name="movable">
        <bool>true</bool>
       </property>
-      <widget class="QWidget" name="notebook">
+      <widget class="QWidget" name="notebook_1">
        <property name="minimumSize">
         <size>
          <width>850</width>
@@ -207,6 +788,19 @@ QTabBar{
      </widget>
     </item>
     <item>
+     <spacer name="horizontalSpacer">
+      <property name="orientation">
+       <enum>Qt::Orientation::Horizontal</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>150</width>
+        <height>20</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item>
      <widget class="QPushButton" name="pb_AddPage">
       <property name="text">
        <string/>
@@ -219,19 +813,6 @@ QTabBar{
        <bool>true</bool>
       </property>
      </widget>
-    </item>
-    <item>
-     <spacer name="horizontalSpacer">
-      <property name="orientation">
-       <enum>Qt::Orientation::Horizontal</enum>
-      </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>40</width>
-        <height>20</height>
-       </size>
-      </property>
-     </spacer>
     </item>
    </layout>
   </widget>
@@ -257,8 +838,7 @@ color: rgb(255, 255, 255);</string>
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionNew"/>
-    <addaction name="actionSave"/>
+    <addaction name="actionSave_2"/>
     <addaction name="actionLoad"/>
     <addaction name="actionExport"/>
     <addaction name="actionImport"/>
@@ -273,7 +853,7 @@ color: rgb(255, 255, 255);</string>
     <addaction name="actionCopy"/>
     <addaction name="actionPaste"/>
     <addaction name="actionSelect_All"/>
-    <addaction name="actionClear"/>
+    <addaction name="actionClear_2"/>
    </widget>
    <widget class="QMenu" name="menuCollab">
     <property name="title">
@@ -302,41 +882,50 @@ color: rgb(255, 255, 255);</string>
    <property name="mouseTracking">
     <bool>true</bool>
    </property>
-   <property name="tabletTracking">
-    <bool>true</bool>
-   </property>
    <property name="windowTitle">
     <string>toolBar</string>
    </property>
    <property name="autoFillBackground">
     <bool>true</bool>
    </property>
-   <property name="iconSize">
-    <size>
-     <width>30</width>
-     <height>30</height>
-    </size>
-   </property>
    <attribute name="toolBarArea">
-    <enum>LeftToolBarArea</enum>
+    <enum>TopToolBarArea</enum>
    </attribute>
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
-   <addaction name="tb_actionCursor"/>
-   <addaction name="tb_actionPen"/>
-   <addaction name="tb_actionEraser"/>
-   <addaction name="tb_actionHighlighter"/>
-   <addaction name="tb_actionLine"/>
-   <addaction name="tb_actionSelection"/>
-   <addaction name="tb_actionText"/>
-   <addaction name="tb_actionShapes"/>
-   <addaction name="tb_actionImages"/>
-   <addaction name="tb_actionVideos"/>
    <addaction name="separator"/>
-   <addaction name="tb_actionUndo"/>
-   <addaction name="tb_actionRedo"/>
+   <addaction name="toolbar_actionCursor"/>
+   <addaction name="toolbar_actionPen"/>
+   <addaction name="toolbar_actionHighlighter"/>
+   <addaction name="toolbar_actionEraser"/>
+   <addaction name="toolbar_actionLine"/>
+   <addaction name="toolbar_actionShapes"/>
+   <addaction name="toolbar_actionImages"/>
+   <addaction name="toolbar_actionVideos"/>
+   <addaction name="toolbar_actionText"/>
+   <addaction name="toolbar_actionSelection"/>
   </widget>
+  <action name="actionOpen">
+   <property name="text">
+    <string>Open</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="text">
+    <string>Save</string>
+   </property>
+  </action>
+  <action name="actionSave_As">
+   <property name="text">
+    <string>Save As</string>
+   </property>
+  </action>
+  <action name="actionClear">
+   <property name="text">
+    <string>Clear</string>
+   </property>
+  </action>
   <action name="actionClose">
    <property name="text">
     <string>Exit</string>
@@ -345,6 +934,11 @@ color: rgb(255, 255, 255);</string>
   <action name="actionTemplates">
    <property name="text">
     <string>Templates</string>
+   </property>
+  </action>
+  <action name="actionShare">
+   <property name="text">
+    <string>Share</string>
    </property>
   </action>
   <action name="actionExport">
@@ -392,12 +986,22 @@ color: rgb(255, 255, 255);</string>
     <string>Select All</string>
    </property>
   </action>
-  <action name="actionClear">
+  <action name="actionClear_2">
    <property name="text">
     <string>Clear</string>
    </property>
   </action>
-  <action name="tb_actionCursor">
+  <action name="actionUndo">
+   <property name="text">
+    <string>Undo</string>
+   </property>
+  </action>
+  <action name="actionRedo">
+   <property name="text">
+    <string>Redo</string>
+   </property>
+  </action>
+  <action name="toolbar_actionCursor">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -409,7 +1013,7 @@ color: rgb(255, 255, 255);</string>
     <string>Cursor</string>
    </property>
   </action>
-  <action name="tb_actionPen">
+  <action name="toolbar_actionPen">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -421,7 +1025,7 @@ color: rgb(255, 255, 255);</string>
     <string>Pen</string>
    </property>
   </action>
-  <action name="tb_actionHighlighter">
+  <action name="toolbar_actionHighlighter">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -433,7 +1037,7 @@ color: rgb(255, 255, 255);</string>
     <string>Highlighter</string>
    </property>
   </action>
-  <action name="tb_actionEraser">
+  <action name="toolbar_actionEraser">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -445,7 +1049,7 @@ color: rgb(255, 255, 255);</string>
     <string>Eraser</string>
    </property>
   </action>
-  <action name="tb_actionLine">
+  <action name="toolbar_actionLine">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -457,7 +1061,7 @@ color: rgb(255, 255, 255);</string>
     <string>Line</string>
    </property>
   </action>
-  <action name="tb_actionShapes">
+  <action name="toolbar_actionShapes">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -469,7 +1073,7 @@ color: rgb(255, 255, 255);</string>
     <string>Shapes</string>
    </property>
   </action>
-  <action name="tb_actionImages">
+  <action name="toolbar_actionImages">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -481,7 +1085,7 @@ color: rgb(255, 255, 255);</string>
     <string>Images</string>
    </property>
   </action>
-  <action name="tb_actionVideos">
+  <action name="toolbar_actionVideos">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -493,7 +1097,7 @@ color: rgb(255, 255, 255);</string>
     <string>Videos</string>
    </property>
   </action>
-  <action name="tb_actionUndo">
+  <action name="actionUndo_2">
    <property name="icon">
     <iconset resource="../../Icons/Icons.qrc">
      <normaloff>:/Tools/undo.png</normaloff>:/Tools/undo.png</iconset>
@@ -502,7 +1106,7 @@ color: rgb(255, 255, 255);</string>
     <string>Undo</string>
    </property>
   </action>
-  <action name="tb_actionRedo">
+  <action name="actionRedo_2">
    <property name="icon">
     <iconset resource="../../Icons/Icons.qrc">
      <normaloff>:/Tools/redo.png</normaloff>:/Tools/redo.png</iconset>
@@ -511,7 +1115,7 @@ color: rgb(255, 255, 255);</string>
     <string>Redo</string>
    </property>
   </action>
-  <action name="tb_actionSelection">
+  <action name="toolbar_actionSelection">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -523,7 +1127,7 @@ color: rgb(255, 255, 255);</string>
     <string>Selection</string>
    </property>
   </action>
-  <action name="tb_actionText">
+  <action name="toolbar_actionText">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -540,7 +1144,7 @@ color: rgb(255, 255, 255);</string>
     <string>Chat</string>
    </property>
   </action>
-  <action name="actionSave">
+  <action name="actionSave_2">
    <property name="text">
     <string>Save</string>
    </property>
@@ -548,11 +1152,6 @@ color: rgb(255, 255, 255);</string>
   <action name="actionLoad">
    <property name="text">
     <string>Load</string>
-   </property>
-  </action>
-  <action name="actionNew">
-   <property name="text">
-    <string>New</string>
    </property>
   </action>
  </widget>
