@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPu
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QColor, QFont, QLinearGradient
 from WhiteboardApplication.main import BoardScene, MainWindow
+from server import Server
 
 # Sets up the sqlite database to hold user information
 def init_database():
