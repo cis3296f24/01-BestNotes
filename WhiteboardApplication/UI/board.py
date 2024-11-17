@@ -21,6 +21,9 @@ from PySide6.QtWidgets import (QAbstractScrollArea, QApplication, QGraphicsView,
     QPushButton, QScrollArea, QSizePolicy, QSpacerItem,
     QStatusBar, QTabWidget, QToolBar, QWidget)
 import Icons_rc
+import socket
+import threading
+import json
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -170,50 +173,6 @@ class Ui_MainWindow(object):
         self.tabWidget.setTabsClosable(True)
         self.tabWidget.setMovable(True)
 
-        # self.notebook = QWidget()
-        # self.notebook.setObjectName(u"notebook")
-        # self.notebook.setMinimumSize(QSize(850, 0))
-        # self.notebook.setStyleSheet(u"")
-        # self.gridLayout = QGridLayout(self.notebook)
-        # self.gridLayout.setObjectName(u"gridLayout")
-        # self.gridLayout.setContentsMargins(0, 0, 0, 0)
-        # self.scrollArea_2 = QScrollArea(self.notebook)
-        # self.scrollArea_2.setObjectName(u"scrollArea_2")
-        # self.scrollArea_2.setMinimumSize(QSize(0, 0))
-        # self.scrollArea_2.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        # self.scrollArea_2.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        # self.scrollArea_2.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
-        # self.scrollArea_2.setWidgetResizable(True)
-        # self.scrollAreaWidgetContents_3 = QWidget()
-        # self.scrollAreaWidgetContents_3.setObjectName(u"scrollAreaWidgetContents_3")
-        # self.scrollAreaWidgetContents_3.setGeometry(QRect(0, 0, 850, 1100))
-        # self.scrollAreaWidgetContents_3.setMinimumSize(QSize(850, 1100))
-        # self.scrollAreaWidgetContents_3.setMaximumSize(QSize(850, 1100))
-        # self.horizontalLayout_2 = QHBoxLayout(self.scrollAreaWidgetContents_3)
-        # self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
-        # self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
-        # self.gv_Canvas = QGraphicsView(self.scrollAreaWidgetContents_3)
-        # self.gv_Canvas.setObjectName(u"gv_Canvas")
-        # sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-        # sizePolicy1.setHorizontalStretch(0)
-        # sizePolicy1.setVerticalStretch(0)
-        # sizePolicy1.setHeightForWidth(self.gv_Canvas.sizePolicy().hasHeightForWidth())
-        # self.gv_Canvas.setSizePolicy(sizePolicy1)
-        # self.gv_Canvas.setMinimumSize(QSize(850, 1100))
-        # self.gv_Canvas.viewport().setProperty(u"cursor", QCursor(Qt.CursorShape.ArrowCursor))
-        # self.gv_Canvas.setStyleSheet(u"border:0px;")
-        # self.gv_Canvas.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        # self.gv_Canvas.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        # self.gv_Canvas.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
-
-        # self.horizontalLayout_2.addWidget(self.gv_Canvas)
-        #
-        # self.scrollArea_2.setWidget(self.scrollAreaWidgetContents_3)
-        #
-        # self.gridLayout.addWidget(self.scrollArea_2, 0, 0, 1, 1)
-
-        # self.tabWidget.addTab(self.notebook, "")
-
         self.horizontalLayout.addWidget(self.tabWidget)
 
         self.pb_AddPage = QPushButton(self.centralwidget)
@@ -297,8 +256,6 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
 
         self.tabWidget.setCurrentIndex(0)
-
-
         QMetaObject.connectSlotsByName(MainWindow)
     # setupUi
 

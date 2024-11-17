@@ -5,7 +5,6 @@ from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPu
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QColor, QFont, QLinearGradient
 from WhiteboardApplication.main import BoardScene, MainWindow
-from server import Server
 
 # Sets up the sqlite database to hold user information
 def init_database():
@@ -96,6 +95,7 @@ class LoginWindow(QWidget):
 
         super().paintEvent(event)
 
+    '''
     # Method to log a user in
     def login(self):
         # Gets username and password, and sets cursor to search for the credentials
@@ -113,6 +113,26 @@ class LoginWindow(QWidget):
             if check_password(stored_password, password):  # Correct call to check_password
                 QMessageBox.information(self, "Login Success", "Welcome!")
                 self.parent().show_whiteboard()  # Parent is the ApplicationWindow
+            else:
+                QMessageBox.warning(self, "Login Failed", "Invalid password.")
+        else:
+            QMessageBox.warning(self, "Login Failed", "User not found.")
+    
+    '''
+    def login(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        cursor = self.db_conn.cursor()
+
+        cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+
+        if result:
+            stored_password = result[0]
+            if check_password(stored_password, password):  # Correct call to check_password
+                QMessageBox.information(self, "Login Success", "Welcome!")
+                self.parent().show_whiteboard()  # This will switch to the whiteboard/main window
+                self.parent().client = True  # Mark the user as logged in (set client state)
             else:
                 QMessageBox.warning(self, "Login Failed", "Invalid password.")
         else:
@@ -135,6 +155,7 @@ class LoginWindow(QWidget):
         except sqlite3.IntegrityError:
             QMessageBox.warning(self, "Error", "Username already exists.")
 
+'''
 # Application window, where the application is run from
 class ApplicationWindow(QMainWindow):
     def __init__(self):
@@ -151,6 +172,24 @@ class ApplicationWindow(QMainWindow):
 
     def show_whiteboard(self):
         # Switches to whiteboard once login is done correctly
+        self.setCentralWidget(self.main_window)
+'''
+class ApplicationWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Collaborative Whiteboard")
+        self.client = False
+        # Creates the login window, board scene, and main window
+        self.login_window = LoginWindow(self)
+
+        # Start with login window
+        self.setCentralWidget(self.login_window)
+
+    def show_whiteboard(self):
+        self.board_scene = BoardScene()
+        self.main_window = MainWindow()  # Import your MainWindow properly
+        # Switches to whiteboard once login is done correctly
+        self.main_window.client = self.client  # Pass client state to the MainWindow
         self.setCentralWidget(self.main_window)
 
 def main():

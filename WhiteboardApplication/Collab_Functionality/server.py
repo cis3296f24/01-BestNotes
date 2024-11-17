@@ -1,40 +1,41 @@
-import asyncio
-import websockets
-import json
+from flask import Flask, request, jsonify
 
-class Server:
-    def __init__(self, host='localhost', port=12345):
-        self.host = host
-        self.port = port
-        self.clients = set()
-        self.running = True
+app = Flask(__name__)
+sessions = {}
 
-    async def handle_client(self, websocket, path):
-        """Handle an individual client connection."""
-        self.clients.add(websocket)
-        try:
-            async for message in websocket:
-                # Broadcast the message to all other clients
-                await self.broadcast(message, websocket)
-        except Exception as e:
-            print(f"Error with client: {e}")
-        finally:
-            self.clients.remove(websocket)
+@app.route('/create_session', methods=['POST'])
+def create_session():
+    data = request.json
+    session_id = data.get('session_id')
+    host = data.get('host')
 
-    async def broadcast(self, message, sender_websocket):
-        """Broadcast a message to all connected clients except the sender."""
-        for client in self.clients:
-            if client != sender_websocket:
-                try:
-                    await client.send(message)
-                except Exception as e:
-                    print(f"Error sending to client: {e}")
+    if not session_id or not host:
+        return jsonify({"error": "Invalid data"}), 400
 
-    async def start(self):
-        """Start the WebSocket server."""
-        async with websockets.serve(self.handle_client, self.host, self.port):
-            await asyncio.Future()  # Run the server until interrupted
+    if session_id in sessions:
+        return jsonify({"error": "Session ID already exists"}), 400
 
-    def stop(self):
-        """Stop the server."""
-        self.running = False
+    sessions[session_id] = {"host": host, "participants": []}
+    return jsonify({"message": "Session created"}), 200
+
+@app.route('/join_session', methods=['POST'])
+def join_session():
+    data = request.json
+    session_id = data.get('session_id')
+    username = data.get('username')
+
+    if not session_id or not username:
+        return jsonify({"error": "Invalid data"}), 400
+
+    session = sessions.get(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    if len(session['participants']) >= 7:
+        return jsonify({"error": "Session is full"}), 403
+
+    session['participants'].append(username)
+    return jsonify({"message": "Joined session"}), 200
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
