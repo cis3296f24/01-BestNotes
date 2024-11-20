@@ -164,9 +164,9 @@ class BoardScene(QGraphicsScene):
                 self.removeItem(item)
 
     def highlight(self, position):
-        highlight_color = QColor(255, 255, 0, 30)
+        highlight_color = QColor(255, 255, 0, 10)
         highlight_brush = QBrush(highlight_color)
-        highlight_radius = 15
+        highlight_radius = 18
         highlight_circle = QGraphicsEllipseItem(position.x() - highlight_radius,position.y() - highlight_radius,highlight_radius * 2,highlight_radius * 2)
 
         highlight_circle.setBrush(highlight_brush)
@@ -227,7 +227,7 @@ class BoardScene(QGraphicsScene):
             self.path.lineTo(curr_position)
             self.pathItem.setPath(self.path)
             self.previous_position = curr_position
-        elif getattr(self, 'highlighting', False):
+        elif self.active_tool == "highlighter":
             print("highlighting")
             self.highlight(event.scenePos())
 

@@ -1,19 +1,17 @@
 import sys
 import sqlite3
-from PySide6.QtWidgets import (
-    QApplication, QWidget, QMainWindow, QVBoxLayout, QLineEdit, QPushButton, QMessageBox
-)
-from PySide6.QtGui import QFont, QColor, QPalette, QLinearGradient, QBrush, QPainter
 import bcrypt
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox, QMainWindow
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPainter, QColor, QFont, QLinearGradient
+from WhiteboardApplication.main import BoardScene, MainWindow
 
-from WhiteboardApplication.main import MainWindow, BoardScene
-
-#Sets up the sqlite database to hold user information
+# Sets up the sqlite database to hold user information
 def init_database():
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
 
-    #Creates table if it doesn't already exist
+    # Creates table if it doesn't already exist
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -29,14 +27,20 @@ def encrypt_password(password):
 
 # Verifies entered password against the stored hash
 def check_password(stored_hash, password):
-    return bcrypt.checkpw(password.encode(), stored_hash.encode())
+    try:
+        # Check if the entered password matches the stored hash
+        return bcrypt.checkpw(password.encode(), stored_hash.encode())
+    except Exception as e:
+        # General exception handler for unexpected errors
+        print(f"Error during password check: {e}")
+        return False
 
 # Login Window
 class LoginWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        #Creates window
+        # Creates window
         self.setWindowTitle("Login")
         self.setMinimumSize(1060, 702)
 
@@ -79,7 +83,7 @@ class LoginWindow(QWidget):
         self.setLayout(layout)
         self.db_conn = init_database()
 
-    #Draws and resizes the background color
+    # Draws and resizes the background color
     def paintEvent(self, event):
         gradient = QLinearGradient(0, 0, 0, self.height())
         gradient.setColorAt(0.0, QColor(0, 0, 0))  # Black
@@ -91,57 +95,52 @@ class LoginWindow(QWidget):
 
         super().paintEvent(event)
 
-    #Method to log a user in
+    # Method to log a user in
     def login(self):
-
-        #gets username and password, and sets cursor to search for the credentials
+        # Gets username and password, and sets cursor to search for the credentials
         username = self.username_input.text()
         password = self.password_input.text()
         cursor = self.db_conn.cursor()
 
-        #Checks if the credentials are there
+        # Checks if the credentials are there
         cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
         result = cursor.fetchone()
 
-        #Checks if the decrypted password matches what the user entered
+        # Checks if the decrypted password matches what the user entered
         if result:
             stored_password = result[0]
-            try:
-                if check_password(stored_password) == password:
-                    QMessageBox.information(self, "Login Success", "Welcome!")
-                    self.parent().show_whiteboard()  # Parent is the ApplicationWindow
-                else:
-                    QMessageBox.warning(self, "Login Failed", "Invalid password.")
-            except Exception:
-                QMessageBox.warning(self, "Error", "Failed to decrypt password.")
+            if check_password(stored_password, password):  # Correct call to check_password
+                QMessageBox.information(self, "Login Success", "Welcome!")
+                self.parent().show_whiteboard()  # Parent is the ApplicationWindow
+            else:
+                QMessageBox.warning(self, "Login Failed", "Invalid password.")
         else:
             QMessageBox.warning(self, "Login Failed", "User not found.")
 
-    #Allows a new user to register their credentials
+    # Allows a new user to register their credentials
     def register(self):
-
-        #Accepts username and password, and sets the cursor in the database to add these credentials
+        # Accepts username and password, and sets the cursor in the database to add these credentials
         username = self.username_input.text()
         password = self.password_input.text()
         cursor = self.db_conn.cursor()
 
-        #Inserts the new credentials and notifies user of status of registration
+        # Inserts the new credentials and notifies user of status of registration
         try:
             cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, encrypt_password(password)))
             self.db_conn.commit()
             QMessageBox.information(self, "Registration Success", "User registered successfully!")
 
-        #Stops if a user tries to register when they already have an account
+        # Stops if a user tries to register when they already have an account
         except sqlite3.IntegrityError:
             QMessageBox.warning(self, "Error", "Username already exists.")
 
-#Application window, where the application is run from
+# Application window, where the application is run from
 class ApplicationWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Collaborative Whiteboard")
 
-        #Creates the login window, board scene, and main window
+        # Creates the login window, board scene, and main window
         self.login_window = LoginWindow(self)
         self.board_scene = BoardScene()
         self.main_window = MainWindow()  # Import your MainWindow properly
@@ -153,9 +152,12 @@ class ApplicationWindow(QMainWindow):
         # Switches to whiteboard once login is done correctly
         self.setCentralWidget(self.main_window)
 
-
-if __name__ == "__main__":
+def main():
     app = QApplication(sys.argv)
     main_window = ApplicationWindow()
     main_window.show()
     sys.exit(app.exec())
+
+# Optional: make this the default entry point if running as a script
+if __name__ == "__main__":
+    main()
