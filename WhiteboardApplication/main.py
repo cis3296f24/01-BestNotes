@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QFileDialog,
     QGraphicsPixmapItem, QWidget, QTabWidget, QAbstractScrollArea, QSizePolicy, QGraphicsView, QHBoxLayout, QGridLayout,
-    QScrollArea, QMessageBox
+    QScrollArea, QMessageBox, QDialog
 )
 
 from PySide6.QtGui import (
@@ -34,15 +34,20 @@ from PySide6.QtGui import (
 )
 
 from PySide6.QtCore import (
-    Qt, QRectF, QSizeF, QPointF, QSize, QRect
+    Qt, QRectF, QSizeF, QPointF, QSize, QRect, QFile, QIODevice
 )
+
+import ssl
+import json
 
 from WhiteboardApplication.UI.board import Ui_MainWindow
 from WhiteboardApplication.text_box import TextBox
 from WhiteboardApplication.new_notebook import NewNotebook
 from WhiteboardApplication.Collab_Functionality.host_window import HostWindow
-from WhiteboardApplication.Collab_Functionality.client import Client
 from WhiteboardApplication.board_scene import BoardScene
+from WhiteboardApplication.database import UserDatabase
+from WhiteboardApplication.collab_dialogs import HostDialog, JoinDialog, UserRegistry
+from WhiteboardApplication.Collab_Functionality.collab_manager import CollabServer, CollabClient
 
 class MainWindow(QMainWindow, Ui_MainWindow):
 
@@ -51,6 +56,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
 
         self.client = False  # Default state (not logged in)
+
+        self.config = self.load_config()
+        print("Loaded config:", self.config)  # Add this for debugging
+        self.ssl_key_path = self.config.get('ssl_key_path')  # Use .get() to avoid KeyError
+        self.ssl_cert_path = self.config.get('ssl_cert_path')  # Same here
+
+        if not self.ssl_key_path or not self.ssl_cert_path:
+            print("Warning: SSL key or certificate path is missing.")
 
         if hasattr(self, 'actionImages'):
             print("actionImages is initialized.")
@@ -63,7 +76,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionNew.triggered.connect(self.new_tab)
 
         #Menu Bar: Hosting and Joining
-        self.actionHost.triggered.connect(self.open_host_window())
+        # Add collab-related members
+        self.user_db = UserDatabase()
+        self.user_reg = UserRegistry()
+        self.collab_server = None
+        self.collab_client = None
+        self.username = None
+
+        # Add collab menu actions
+        self.actionHost.triggered.connect(self.host_session)
+        self.actionJoin.triggered.connect(self.join_session)
 
         ############################################################################################################
         # Ensure all buttons behave properly when clicked
@@ -106,8 +128,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.host_window.exec()  # Show the host window
         else:
             QMessageBox.warning(self, "Login Required", "Please log in first to host a session.")
-
-    #Joining a collab
 
     #Upload Image
     def upload_image(self):
@@ -153,7 +173,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.tb_actionPen.isChecked():
                 # Enable pen mode, disable eraser
                 print("Pen activated")  # Debugging print
-                # self.color_changed(self.current_color)
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
                 self.tb_actionEraser.setChecked(False)  # Ensure eraser is not active
                 self.tb_actionCursor.setChecked(False)
@@ -409,6 +428,256 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         NewNotebook.get_canvas(NewNotebook).setScene(self.scene)
         NewNotebook.get_canvas(NewNotebook).setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
+    def load_config(self):
+        """Load configuration from a JSON file based on the project directory"""
+        try:
+            # Get the absolute path to this file's directory
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+
+            # Traverse up the directory tree to find the project root directory (01-BestNotes)
+            project_root = current_dir
+            while not os.path.exists(os.path.join(project_root, 'config.json')):
+                project_root = os.path.dirname(project_root)  # Move up one directory
+
+                # If we reach the root directory without finding config.json, raise an error
+                if project_root == os.path.dirname(project_root):
+                    raise FileNotFoundError("config.json not found in the project directory.")
+
+            # Print the project root path for debugging
+            print(f"Main.py Project root path: {project_root}")
+
+            # Path to the config file (assuming config.json is in the project root)
+            config_path = os.path.join(project_root, 'config.json')
+            print("Main.py config path: "+ config_path + "\n")
+
+            # Load the config file
+            with open(config_path, 'r') as config_file:
+                config = json.load(config_file)
+
+            # Ensure the SSL paths are relative to the project root
+            ssl_key_path = config.get('ssl_key_path', 'ssl/server.key')
+            ssl_cert_path = config.get('ssl_cert_path', 'ssl/server.crt')
+
+            # Join the paths with the project root
+            ssl_key_path = os.path.join(project_root, ssl_key_path)
+            ssl_cert_path = os.path.join(project_root, ssl_cert_path)
+
+            # Validate that the files exist
+            if not os.path.exists(ssl_key_path):
+                raise FileNotFoundError(f"SSL key file not found: {ssl_key_path}")
+            if not os.path.exists(ssl_cert_path):
+                raise FileNotFoundError(f"SSL certificate file not found: {ssl_cert_path}")
+
+            # Update the config dictionary with the absolute paths for SSL files
+            config['ssl_key_path'] = ssl_key_path
+            config['ssl_cert_path'] = ssl_cert_path
+
+            return config
+        except FileNotFoundError as e:
+            print(f"Error: {str(e)}")
+            return {}
+        except json.JSONDecodeError:
+            print(f"Error: Failed to decode JSON from the config file.")
+            return {}
+
+    def load_ssl_files(self, ssl_key_path, ssl_cert_path):
+        """Load SSL key and certificate from files"""
+        try:
+            # Create an SSL context for a secure server
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+
+            # Load the certificate and private key
+            ssl_context.load_cert_chain(certfile=ssl_cert_path, keyfile=ssl_key_path)
+
+            # Return the SSL context for further use
+            return ssl_context, None  # Second value can be None if not needed
+        except Exception as e:
+            print(f"Error loading SSL files: {str(e)}")
+            return None, None
+
+    def host_session(self):
+        dialog = HostDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            username = dialog.get_username()
+            if not self.user_db.user_exists(username):
+                self.user_db.add_user(username)
+
+            self.username = username
+            port = self.user_reg.register_host(username)
+
+            # Create and configure the server instance
+            self.collab_server = CollabServer()
+            self.collab_server.port = port  # Set the port
+
+            try:
+                # Load SSL configuration
+                config = self.load_config()  # Load config
+                ssl_key_path = config.get('ssl_key_path', '')
+                ssl_cert_path = config.get('ssl_cert_path', '')
+
+                # Ensure the SSL paths are available
+                if not ssl_key_path or not ssl_cert_path:
+                    raise RuntimeError("SSL certificate or key path missing in configuration")
+
+                # Configure SSL context
+                ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                ssl_context.load_cert_chain(certfile=ssl_cert_path, keyfile=ssl_key_path)
+                self.collab_server.ssl_context = ssl_context  # Set the pre-configured SSL context
+
+                # Start the server
+                self.collab_server.start()
+                self.collab_server.clientConnected.connect(self._handle_client_connected)
+                self.collab_server.clientDisconnected.connect(self._handle_client_disconnected)
+                QMessageBox.information(self, "Success", "Successfully started hosting session")
+                print("Hosted successfully")
+                self.scene.change_color(QColor("#FF0000"))
+            except RuntimeError as e:
+                QMessageBox.warning(self, "Error", f"Could not start hosting: {str(e)}")
+                print(f"Could not host: {str(e)}")
+
+    def join_session(self):
+        dialog = JoinDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            username = dialog.get_username()
+            host_username = dialog.get_host_username()
+
+            if not self.user_db.user_exists(username):
+                self.user_db.add_user(username)
+
+            try:
+                host_address, port = self.user_reg.get_host_address(host_username)
+                self.username = username
+                self.collab_client = CollabClient(self)
+
+                if self.collab_client.connect_to_host(host_address, port, username):
+                    # SSL context for client-side secure connection
+                    config = self.load_config()  # Load config
+                    self.ssl_key_path = config.get('ssl_key_path', '')
+                    self.ssl_cert_path = config.get('ssl_cert_path', '')
+
+                    if not self.ssl_key_path or not self.ssl_cert_path:
+                        raise RuntimeError("SSL certificate or key path missing in configuration")
+
+                    # Use the SSL context to establish a secure connection
+                    ssl_context, _ = self.load_ssl_files(self.ssl_key_path, self.ssl_cert_path)
+                    if not ssl_context:
+                        raise RuntimeError("Failed to load SSL context. Check the SSL configuration.")
+
+                    if self.collab_client.secure_connect(ssl_context):
+                        self.collab_client.drawingReceived.connect(self._handle_remote_drawing)
+                        QMessageBox.information(self, "Connected", "Successfully joined session")
+                        print("Joined session successfully")
+                        self.scene.change_color(QColor("#3600FF"))
+                    else:
+                        QMessageBox.warning(self, "Connection Failed", "Could not connect to host")
+                else:
+                    QMessageBox.warning(self, "Connection Failed", "Could not connect to host")
+            except ValueError:
+                QMessageBox.warning(self, "Host Not Found", f"No active session found for user {host_username}")
+
+    def validate_config(self, config):
+        """Validate that necessary config values are present"""
+        if not config.get('ssl_key_path') or not config.get('ssl_cert_path'):
+            QMessageBox.warning(self, "Configuration Error", "SSL key and certificate paths are required.")
+            return False
+        return True
+
+    def _handle_client_connected(self, username: str):
+        QMessageBox.information(self, "User Joined", f"{username} joined the session")
+
+    def _handle_client_disconnected(self, username: str):
+        QMessageBox.information(self, "User Left", f"{username} left the session")
+
+    def closeEvent(self, event):
+        # Clean up when the window is closed
+        if hasattr(self, 'username'):
+            self.user_reg.remove_user(self.username)
+        super().closeEvent(event)
+
+    def handle_incoming_data(self, data):
+        parsed_data = json.loads(data)
+        if parsed_data['type'] == 'drawing':
+            self.scene.apply_remote_drawing(parsed_data['data'])
+
+    def _handle_remote_drawing(self, drawing_data: dict):
+        # Update the canvas with remote drawing data
+        self.scene.apply_remote_drawing(drawing_data)
+
+    '''
+    def host_session(self):
+        dialog = HostDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            username = dialog.get_username()
+            if not self.user_db.user_exists(username):
+                self.user_db.add_user(username)
+
+            self.username = username
+            port = self.user_reg.register_host(username)
+
+            self.collab_server = CollabServer(self)
+            try:
+                self.collab_server.start(port)
+                self.collab_server.clientConnected.connect(self._handle_client_connected)
+                self.collab_server.clientDisconnected.connect(self._handle_client_disconnected)
+                QMessageBox.information(self, "Success",
+                                        "Successfully started hosting session")
+                print("Hosted successfully")
+                self.scene.change_color(QColor("#FF0000"))
+            except RuntimeError as e:
+                QMessageBox.warning(self, "Error",
+                                    f"Could not start hosting: {str(e)}")
+                print("Could not host")
+
+    def join_session(self):
+        dialog = JoinDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            username = dialog.get_username()
+            host_username = dialog.get_host_username()
+
+            if not self.user_db.user_exists(username):
+                self.user_db.add_user(username)
+
+            try:
+                host_address, port = self.user_reg.get_host_address(host_username)
+                self.username = username
+                self.collab_client = CollabClient(self)
+
+                if self.collab_client.connect_to_host(host_address, port, username):
+                    self.collab_client.drawingReceived.connect(self._handle_remote_drawing)
+                    QMessageBox.information(self, "Connected",
+                                            "Successfully joined session")
+                    print("Joined session successfully")
+                    self.scene.change_color(QColor("#3600FF"))
+                else:
+                    QMessageBox.warning(self, "Connection Failed",
+                                        "Could not connect to host")
+            except ValueError:
+                QMessageBox.warning(self, "Host Not Found",
+                                    f"No active session found for user {host_username}")
+
+    def _handle_client_connected(self, username: str):
+        QMessageBox.information(self, "User Joined",
+                                f"{username} joined the session")
+
+    def _handle_client_disconnected(self, username: str):
+        QMessageBox.information(self, "User Left",
+                                f"{username} left the session")
+
+    def closeEvent(self, event):
+        # Clean up when the window is closed
+        if hasattr(self, 'username'):
+            self.user_reg.remove_user(self.username)
+        super().closeEvent(event)
+
+    def handle_incoming_data(self, data):
+        parsed_data = json.loads(data)
+        if parsed_data['type'] == 'drawing':
+            self.scene.apply_remote_drawing(parsed_data['data'])
+
+    def _handle_remote_drawing(self, drawing_data: dict):
+        # Update the canvas with remote drawing data
+        self.scene.apply_remote_drawing(drawing_data)
+    '''
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

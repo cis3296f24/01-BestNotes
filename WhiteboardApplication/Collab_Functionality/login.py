@@ -1,17 +1,20 @@
 import sys
 import sqlite3
 import bcrypt
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox, QMainWindow
+import json
+import threading
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPainter, QColor, QFont, QLinearGradient
-from WhiteboardApplication.main import BoardScene, MainWindow
+from PySide6.QtGui import QFont, QPainter, QColor, QLinearGradient
+from WhiteboardApplication.Collab_Functionality.collab_manager import CollabServer, CollabClient
+from WhiteboardApplication.main import MainWindow
+from WhiteboardApplication.board_scene import BoardScene
 
-# Sets up the sqlite database to hold user information
+
+# Database initialization
 def init_database():
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-
-    # Creates table if it doesn't already exist
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -21,21 +24,20 @@ def init_database():
     conn.commit()
     return conn
 
-# Encrypts password with bcrypt
+
+# Password encryption
 def encrypt_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-# Verifies entered password against the stored hash
+
 def check_password(stored_hash, password):
     try:
-        # Check if the entered password matches the stored hash
         return bcrypt.checkpw(password.encode(), stored_hash.encode())
     except Exception as e:
-        # General exception handler for unexpected errors
-        print(f"Error during password check: {e}")
+        print(f"Password check error: {e}")
         return False
 
-# Login Window
+
 class LoginWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -43,6 +45,8 @@ class LoginWindow(QWidget):
         # Creates window
         self.setWindowTitle("Login")
         self.setMinimumSize(1060, 702)
+
+        self.client = None
 
         # Layout setup
         layout = QVBoxLayout()
@@ -81,123 +85,114 @@ class LoginWindow(QWidget):
         layout.addWidget(self.register_button)
 
         self.setLayout(layout)
-        self.db_conn = init_database()
 
-    # Draws and resizes the background color
+        self.setLayout(layout)
+        self.db_conn = init_database()
+        self.client = CollabClient()
+
     def paintEvent(self, event):
         gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0.0, QColor(0, 0, 0))  # Black
-        gradient.setColorAt(1.0, QColor(65, 105, 225))  # Royal Blue at the bottom
+        gradient.setColorAt(0.0, QColor(30, 30, 30))
+        gradient.setColorAt(1.0, QColor(70, 70, 250))
 
         painter = QPainter(self)
         painter.setBrush(gradient)
-        painter.drawRect(self.rect())  # Fill the entire widget with the gradient
-
+        painter.drawRect(self.rect())
         super().paintEvent(event)
 
     '''
-    # Method to log a user in
     def login(self):
-        # Gets username and password, and sets cursor to search for the credentials
         username = self.username_input.text()
         password = self.password_input.text()
         cursor = self.db_conn.cursor()
-
-        # Checks if the credentials are there
         cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
         result = cursor.fetchone()
 
-        # Checks if the decrypted password matches what the user entered
-        if result:
-            stored_password = result[0]
-            if check_password(stored_password, password):  # Correct call to check_password
-                QMessageBox.information(self, "Login Success", "Welcome!")
-                self.parent().show_whiteboard()  # Parent is the ApplicationWindow
-            else:
-                QMessageBox.warning(self, "Login Failed", "Invalid password.")
+        if result and check_password(result[0], password):
+            self.client = CollabClient()  # Initialize the client on successful login
+
+            try:
+                self.client.connect()  # Attempt to connect to the server
+                self.client.send(f"LOGIN {username}")  # Send login message
+                QMessageBox.information(self, "Login Successful", "Welcome!")
+                self.parent().show_whiteboard(self.client)  # Pass client to parent
+            except Exception as e:
+                QMessageBox.critical(self, "Connection Failed", f"Error: {e}")
         else:
-            QMessageBox.warning(self, "Login Failed", "User not found.")
-    
+            QMessageBox.warning(self, "Login Failed", "Invalid username or password.")
     '''
+
     def login(self):
         username = self.username_input.text()
         password = self.password_input.text()
         cursor = self.db_conn.cursor()
-
         cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
         result = cursor.fetchone()
 
-        if result:
-            stored_password = result[0]
-            if check_password(stored_password, password):  # Correct call to check_password
-                QMessageBox.information(self, "Login Success", "Welcome!")
-                self.parent().show_whiteboard()  # This will switch to the whiteboard/main window
-                self.parent().client = True  # Mark the user as logged in (set client state)
-            else:
-                QMessageBox.warning(self, "Login Failed", "Invalid password.")
-        else:
-            QMessageBox.warning(self, "Login Failed", "User not found.")
+        if result and check_password(result[0], password):
+            self.client = CollabClient()  # Initialize the client on successful login
 
-    # Allows a new user to register their credentials
+            try:
+                self.client.connect()  # Attempt to connect to the server
+                self.client.send(f"LOGIN {username}")  # Send login message
+                QMessageBox.information(self, "Login Successful", "Welcome!")
+                self.parent().show_whiteboard(self.client)  # Pass client to parent
+            except Exception as e:
+                QMessageBox.critical(self, "Connection Failed", f"Error: {e}")
+        else:
+            QMessageBox.warning(self, "Login Failed", "Invalid username or password.")
+
     def register(self):
-        # Accepts username and password, and sets the cursor in the database to add these credentials
         username = self.username_input.text()
         password = self.password_input.text()
         cursor = self.db_conn.cursor()
 
-        # Inserts the new credentials and notifies user of status of registration
         try:
-            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, encrypt_password(password)))
+            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)",
+                           (username, encrypt_password(password)))
             self.db_conn.commit()
-            QMessageBox.information(self, "Registration Success", "User registered successfully!")
-
-        # Stops if a user tries to register when they already have an account
+            QMessageBox.information(self, "Registration Successful", "User registered!")
         except sqlite3.IntegrityError:
-            QMessageBox.warning(self, "Error", "Username already exists.")
+            QMessageBox.warning(self, "Registration Failed", "Username already exists.")
 
-'''
-# Application window, where the application is run from
+
 class ApplicationWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Collaborative Whiteboard")
-
-        # Creates the login window, board scene, and main window
+        self.setGeometry(100, 100, 800, 600)
         self.login_window = LoginWindow(self)
-        self.board_scene = BoardScene()
-        self.main_window = MainWindow()  # Import your MainWindow properly
-
-        # Start with login window
         self.setCentralWidget(self.login_window)
 
-    def show_whiteboard(self):
-        # Switches to whiteboard once login is done correctly
-        self.setCentralWidget(self.main_window)
-'''
-class ApplicationWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Collaborative Whiteboard")
-        self.client = False
-        # Creates the login window, board scene, and main window
-        self.login_window = LoginWindow(self)
+        self.client = None
 
-        # Start with login window
-        self.setCentralWidget(self.login_window)
-
-    def show_whiteboard(self):
-        self.board_scene = BoardScene()
-        self.main_window = MainWindow()  # Import your MainWindow properly
-        # Switches to whiteboard once login is done correctly
-        self.main_window.client = self.client  # Pass client state to the MainWindow
+    def show_whiteboard(self, client):
+        #if self.client:
+        print("Transitioning to whiteboard...")
+        self.main_window = MainWindow()
         self.setCentralWidget(self.main_window)
+            #self.board_scene = BoardScene()
+            #self.main_window.set_client(self.client)  # Pass the client to the whiteboard
+            #self.close()  # Close the login window
+
+
+def start_server():
+    print("Server started in login")
+    server = CollabServer()
+    server.start()
+
 
 def main():
+    # Start the server in a separate thread
+    server_thread = threading.Thread(target=start_server, daemon=True)
+    server_thread.start()
+
+    # Start the application
     app = QApplication(sys.argv)
-    main_window = ApplicationWindow()
-    main_window.show()
+    window = ApplicationWindow()
+    window.show()
     sys.exit(app.exec())
 
-# Optional: make this the default entry point if running as a script
+
 if __name__ == "__main__":
     main()

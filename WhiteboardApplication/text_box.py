@@ -30,10 +30,10 @@ class TextBox(QGraphicsTextItem):
 
         # Define color mapping for resize handles
         handle_colors = {
-            'topleft': QColor(255, 0, 0),     # Red doesn't work
-            'top': QColor(0, 255, 0),         # Green doesn't work
+            'topleft': QColor(255, 0, 0),     # Red
+            'top': QColor(0, 255, 0),         # Green
             'topright': QColor(0, 0, 255),    # Blue
-            'right': QColor(255, 255, 0),     # Yellow doesn't work
+            'right': QColor(255, 255, 0),     # Yellow
             'bottomright': QColor(255, 0, 255), # Magenta
             'bottom': QColor(0, 255, 255),    # Cyan
             'bottomleft': QColor(255, 128, 0), # Orange

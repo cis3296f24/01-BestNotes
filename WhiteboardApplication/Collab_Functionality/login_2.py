@@ -3,11 +3,12 @@ import sys
 import sqlite3
 import bcrypt
 import json
-import threading
+import ssl
+import socket
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QPainter, QColor, QFont, QLinearGradient
-from PySide6.QtNetwork import QTcpServer, QTcpSocket, QHostAddress, QSslConfiguration, QSsl, QSslKey, QSslCertificate
+
 
 # You can import your server and client modules here (replace 'login_2.py' and 'client.py' with actual file names)
 from WhiteboardApplication.network_manager import CollabServer, CollabClient  # Import the Server class
@@ -43,44 +44,83 @@ def check_password(stored_hash, password):
         print(f"Error during password check: {e}")
         return False
 
-# The CollabServer class, handling the server's functionality
+'''
 class CollabServer(QThread):
     def __init__(self, parent=None, ssl_key_path=None, ssl_cert_path=None):
         super().__init__(parent)
-        self.server = None  # Replace with actual server logic, using QTcpServer or similar
         self.ssl_key_path = ssl_key_path
         self.ssl_cert_path = ssl_cert_path
+        self.server_socket = None
+        self.is_running = False
 
     def run(self):
-        # Start the server in the background thread
-        pass
+        self.start_server(5000)  # Default port for the server
 
-    def start(self, port):
-        # Set up SSL for the server
-        ssl_config = QSslConfiguration()
-        ssl_config.setPrivateKey(QSslKey(self.ssl_key_path, QSsl.Pem))
-        ssl_config.setLocalCertificate(QSslCertificate(self.ssl_cert_path))
-        self.server.setSslConfiguration(ssl_config)
+    def start_server(self, port):
+        try:
+            context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            context.load_cert_chain(certfile=self.ssl_cert_path, keyfile=self.ssl_key_path)
 
-        # Bind and listen
-        if not self.server.listen(QHostAddress.Any, port):
-            raise RuntimeError(f"Failed to start server: {self.server.errorString()}")
-        print(f"Server started on port {port} with SSL.")
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket = context.wrap_socket(self.server_socket, server_side=True)
+            self.server_socket.bind(('localhost', port))
+            self.server_socket.listen(5)
 
-# The CollabClient class, handling the client-side functionality
+            self.is_running = True
+            print(f"Server started on port {port} with SSL.")
+
+            while self.is_running:
+                client_socket, addr = self.server_socket.accept()
+                print(f"Connection established with {addr}")
+                self.handle_client(client_socket)
+
+        except Exception as e:
+            print(f"Server error: {e}")
+
+    def handle_client(self, client_socket):
+        try:
+            data = client_socket.recv(1024).decode()
+            print(f"Received: {data}")
+            client_socket.sendall("Acknowledged".encode())  # Respond to the client
+        finally:
+            client_socket.close()
+
+    def stop_server(self):
+        self.is_running = False
+        if self.server_socket:
+            self.server_socket.close()
+            print("Server stopped.")
+
 class CollabClient:
     def __init__(self):
-        self.socket = None  # Use QSslSocket or QTcpSocket for secure connection
+        self.socket = None
 
-    def connect_to_host(self):
+    def connect_to_host(self, host, port):
         try:
-            # Implement connection logic here (use SSL if needed)
-            self.socket = None  # Replace with actual socket connection
+            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            self.socket = context.wrap_socket(
+                socket.socket(socket.AF_INET, socket.SOCK_STREAM),
+                server_hostname=host
+            )
+            self.socket.connect((host, port))
+            print("Connected securely to the server.")
             return True
         except Exception as e:
-            print(f"Error connecting to host: {e}")
+            print(f"Error connecting to server: {e}")
             return False
 
+    def send_message(self, message):
+        try:
+            if self.socket:
+                self.socket.sendall(message.encode())
+                response = self.socket.recv(1024).decode()
+                print(f"Server response: {response}")
+        except Exception as e:
+            print(f"Error during communication: {e}")
+        finally:
+            self.socket.close()
+            self.socket = None
+'''
 # Login Window
 class LoginWindow(QWidget):
     def __init__(self, parent=None):
@@ -181,7 +221,7 @@ class LoginWindow(QWidget):
 
                 # After successful login, initialize the client
                 self.client = CollabClient()  # Create the client instance
-                if self.client.connect_to_host():  # Connect to the server
+                if self.client.connect_to_host("localhost", 5000):  # Connect to the server
                     self.parent().set_client(self.client)  # Pass client to the parent (ApplicationWindow)
                 else:
                     QMessageBox.warning(self, "Login Failed", "Could not connect to the server.")
@@ -218,22 +258,19 @@ class ApplicationWindow(QMainWindow):
 
     def start_server(self):
         # Here you start the server, assuming it's blocking.
-        self.server = CollabServer(ssl_key_path=self.login_window.ssl_key_path, ssl_cert_path=self.login_window.ssl_cert_path)  # Pass the SSL paths
-        self.server.start(5000)  # Start the server on a specified port
+        server = CollabServer(ssl_key_path="server-key.key", ssl_cert_path="server-cert.pem")
+        server.start(5000)
 
     def show_whiteboard(self):
         if self.client:
             self.board_scene = BoardScene()
-            self.main_window = MainWindow()  # Create your MainWindow instance
-            self.main_window.client = self.client  # Pass client state to the MainWindow
-            self.setCentralWidget(self.main_window)
-        else:
-            QMessageBox.warning(self, "Error", "You must be logged in first.")
+            self.main_window = MainWindow()
+            self.main_window.set_client(self.client)  # Pass the client to the whiteboard
+            self.main_window.show()
+            self.close()  # Close the login window
 
     def set_client(self, client):
-        """Set the client after successful login."""
         self.client = client
-        self.show_whiteboard()  # After login, show the whiteboard
 
 def main():
     app = QApplication(sys.argv)
