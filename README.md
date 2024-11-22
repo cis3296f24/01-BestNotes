@@ -17,6 +17,25 @@ This program also has a collaboration feature that allows users to work together
 [BestNotes Project Board](https://github.com/orgs/cis3296f24/projects/94/)
 
 ### Windows instructions
+Python Download: https://www.python.org/downloads/windows/
+
+#### PyCharm instructions
+PyCharm Download: https://www.jetbrains.com/pycharm/download/?section=windows
+PDF Instructions for PyCharm: [BestNotes PyCharm Run Instructions.pdf](https://github.com/user-attachments/files/17853496/BestNotes.PyCharm.Run.Instructions.pdf)
+
+1. You need to download Python. You can do this from the Command Prompt by just typing ‘python’. The Microsoft store will open to the software page and you can click ‘Get’ to start a download. **If you downloaded Python through python.org before, please download it again through the Windows store anyway.**
+3. Next, download and install PyCharm
+4. Then download and install VLC media player: https://www.videolan.org/vlc/
+5. Clone the repository link into PyCharm
+6. Once in PyCharm, when you try to run main.py, you will get an error message stating that there is no Python Interpreter configured for the project. Click “Configure Python Interpreter > Add New Interpreter >Add Local Interpreter”
+7. The ‘Add Python Interpreter’ window should appear. Choose your Python Interpreter (for example: "Base Python: Python 3.11.4") and click ‘Okay’. A virtual Environment should be created.
+8. In the terminal in PyCharm, you want to install pyside6 using the command ‘pip install pyside6’ and then ‘pip install python-vlc’
+9. Once installed, you should be able to run BestNotes.
+
+#### IntelliJ instructions
+IntelliJ Download: https://www.jetbrains.com/idea/download/?section=windows
+PDF Instructions for IntelliJ: [Best Notes Windows Set Up Instructions.pdf](https://github.com/user-attachments/files/17594508/BestNotes.Instruction.pdf)
+
 -	First if you don't have IntelliJ, download the IDE IntelliJ, then clone the project into IntelliJ using the repository URL
 -	Ensure you have the python plugin downloaded in the IDE
 -	When you try to run main.py, it will give a warning about a missing translator. So, click configure python interpreter and then add a new local interpreter.
@@ -27,8 +46,6 @@ This program also has a collaboration feature that allows users to work together
 -	Next, install pyside6 with the command pip install pyside6
 -	After it’s installed, you can exit the command prompt and go back to IntelliJ
 -	Finally, run main.py and the application should pop up.
-
-PDF Instructions: [Best Notes Windows Set Up Instructions.pdf](https://github.com/user-attachments/files/17594508/BestNotes.Instruction.pdf)
 
 
 ### Mac Instructions
