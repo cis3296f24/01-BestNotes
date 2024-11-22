@@ -3,6 +3,7 @@ import pickle
 import sys
 from os.path import expanduser
 
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QGraphicsScene,
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QFileDialog,
     QGraphicsPixmapItem, QWidget, QTabWidget, QAbstractScrollArea, QSizePolicy, QGraphicsView, QHBoxLayout, QGridLayout,
-    QScrollArea
+    QScrollArea, QMenu
 )
 
 from PySide6.QtGui import (
@@ -40,6 +41,7 @@ from PySide6.QtCore import (
 from WhiteboardApplication.UI.board import Ui_MainWindow
 from WhiteboardApplication.text_box import TextBox
 from WhiteboardApplication.new_notebook import NewNotebook
+from WhiteboardApplication.video_player import MediaPlayer
 from WhiteboardApplication.Collab_Functionality.client import Client
 
 class BoardScene(QGraphicsScene):
@@ -66,6 +68,9 @@ class BoardScene(QGraphicsScene):
         self.undo_list = []
         self.redo_list = []
         self.highlight_items = []
+        self.i = 1
+        self.highlight_radius_options = [10, 20, 30, 40]
+        self.highlight_radius = 10
 
     #Adds an action to the undo list (or a list of items in the case of textbox), by treating every action as a list
     def add_item_to_undo(self, item):
@@ -166,14 +171,19 @@ class BoardScene(QGraphicsScene):
     def highlight(self, position):
         highlight_color = QColor(255, 255, 0, 10)
         highlight_brush = QBrush(highlight_color)
-        highlight_radius = 18
-        highlight_circle = QGraphicsEllipseItem(position.x() - highlight_radius,position.y() - highlight_radius,highlight_radius * 2,highlight_radius * 2)
+        highlight_circle = QGraphicsEllipseItem(position.x() - self.highlight_radius,position.y() - self.highlight_radius,self.highlight_radius * 2,self.highlight_radius * 2)
 
         highlight_circle.setBrush(highlight_brush)
         highlight_circle.setPen(Qt.NoPen)
 
         self.addItem(highlight_circle)
         self.highlight_items.append(highlight_circle)
+
+    def open_video_player(self):
+        print("Video button clicked")
+        self.player = MediaPlayer()
+        self.player.show()
+        self.player.resize(640, 480)
 
     def mousePressEvent(self, event):
         item = self.itemAt(event.scenePos(), QTransform())
@@ -210,7 +220,16 @@ class BoardScene(QGraphicsScene):
                 elif self.active_tool == "cursor":
                     print("Cursor active")
                     self.drawing = False
+        elif event.button() == Qt.RightButton:
+            self.active_tool = "highlighter"
+            self.drawing = False
+            self.highlight(event.scenePos())
 
+            self.highlight_radius = self.highlight_radius_options[self.i]
+            self.i += 1
+
+            if self.i >= len(self.highlight_radius_options):
+                self.i = 0
 
         super().mousePressEvent(event)
 
@@ -242,6 +261,9 @@ class BoardScene(QGraphicsScene):
                 # Add the completed path to the undo stack when drawing is finished so it can be deleted or added back with undo
                 self.add_item_to_undo(self.pathItem)
                 print("Path item added to undo stack:", self.pathItem)
+            elif self.highlight:
+                self.add_item_to_undo(self.pathItem)
+                print("Path item added to undo stack:", self.pathItem)
             self.drawing = False
             self.is_text_box_selected = False
 
@@ -270,7 +292,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         ############################################################################################################
         # Ensure all buttons behave properly when clicked
-        self.list_of_buttons = [self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser]
+        self.list_of_buttons = [self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser, self.tb_actionVideos]
 
         self.tb_actionPen.setChecked(True)
         self.tb_actionPen.triggered.connect(self.button_clicked)
@@ -280,8 +302,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #sharon helped me out by showing this below
         self.tb_actionText.triggered.connect(self.create_text_box)
         #self.toolbar_actionLine.triggered.connect(self.tb_Line)
-        self.tb_actionEraser.triggered.connect(self.button_clicked)
+        #self.tb_actionEraser.triggered.connect(self.button_clicked)
         self.tb_actionPen.triggered.connect(self.button_clicked)
+
+
+        self.tb_actionVideos.triggered.connect(self.open_video_player)
+
+        #fixing the eraser shit I messed up - RS
+        menu = QMenu()
+        menu.addAction("Erase Object", self.eraseObject_action)
+        menu.addAction("Pen Eraser", self.penEraser_action)
+        self.tb_actionEraser.setMenu(menu)
+
+        self.eraser_color = QColor("#F3F3F3")
+
+
 
         self.current_color = QColor("#000000")
 
@@ -329,6 +364,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 #self.scene.addItem(pixmap_item)  # Add the image to the scene
                 #self.add_item_to_undo(pixmap_item)
 
+    def open_video_player(self):
+        # print("video button clicked")   #debug
+        #create the player from board scene
+        self.scene.open_video_player()
+
     # this finds the current tab and locates the canvas
     # inside that tab to access its scene
     def undo(self):
@@ -352,11 +392,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #         self.tb_actionEraser.setChecked(False)
     #         self.tb_actionPen.setChecked(True)
     #
-    # def color_changed(self, color):
-    #     self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().change_color(color)
+    def color_changed(self, color):
+         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().change_color(color)
 
     #Depending on which button is clicked, sets the appropriate flag so that operations
     #don't overlap
+
+
+    #adding back in eraser menu functions - RS
+    def eraseObject_action(self):
+        print("Erase Object action")
+        print("Eraser activated")  # Debugging print
+        self.scene.set_active_tool("eraser")
+        self.tb_actionPen.setChecked(False)  # Ensure pen is not active
+        self.tb_actionCursor.setChecked(False)
+
+
+
+    def penEraser_action(self):
+        print("Pen Eraser action")
+            # Enable pen mode, disable eraser
+        print("Pen activated")  # Debugging print
+        self.color_changed(self.eraser_color)
+        self.scene.set_active_tool("pen")
+        self.tb_actionEraser.setChecked(False)  # Ensure eraser is not active
+        self.tb_actionCursor.setChecked(False)
+
+
     def button_clicked(self):
         sender_button = self.sender()
 
