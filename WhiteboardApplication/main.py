@@ -69,7 +69,9 @@ class BoardScene(QGraphicsScene):
         self.redo_list = []
         self.highlight_items = []
         self.i = 1
+        self.j = 1
         self.highlight_radius_options = [10, 20, 30, 40]
+        self.pen_radius_options = [1,5,10,20]
         self.highlight_radius = 10
 
     #Adds an action to the undo list (or a list of items in the case of textbox), by treating every action as a list
@@ -226,15 +228,26 @@ class BoardScene(QGraphicsScene):
                     print("Cursor active")
                     self.drawing = False
         elif event.button() == Qt.RightButton:
-            self.active_tool = "highlighter"
-            self.drawing = False
-            self.highlight(event.scenePos())
+            if self.active_tool == "highlighter":
+                self.highlight_radius = self.highlight_radius_options[self.i]
+                self.i += 1
 
-            self.highlight_radius = self.highlight_radius_options[self.i]
-            self.i += 1
-
-            if self.i >= len(self.highlight_radius_options):
-                self.i = 0
+                if self.i >= len(self.highlight_radius_options):
+                    self.i = 0
+            elif self.active_tool == "pen":
+                self.drawing = True
+                self.path = QPainterPath()
+                self.previous_position = event.scenePos()
+                self.path.moveTo(self.previous_position)
+                self.pathItem = QGraphicsPathItem()
+                self.size = self.pen_radius_options[self.j]
+                my_pen = QPen(self.color, self.size)
+                my_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                self.pathItem.setPen(my_pen)
+                self.addItem(self.pathItem)
+                self.j += 1
+                if self.j >= len(self.pen_radius_options):
+                    self.j = 0
 
         super().mousePressEvent(event)
 
