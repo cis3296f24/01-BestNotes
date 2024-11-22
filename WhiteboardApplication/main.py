@@ -3,7 +3,6 @@ import pickle
 import sys
 from os.path import expanduser
 
-
 from PySide6.QtWidgets import (
     QMainWindow,
     QGraphicsScene,
@@ -31,11 +30,11 @@ from PySide6.QtGui import (
     QColor,
     QBrush,
     QAction,
-    QTransform, QBrush, QFont, QPixmap, QImageReader, QCursor
+    QTransform, QBrush, QFont, QPixmap, QImageReader, QCursor, QDesktopServices
 )
 
 from PySide6.QtCore import (
-    Qt, QRectF, QSizeF, QPointF, QSize, QRect
+    Qt, QRectF, QSizeF, QPointF, QSize, QRect, QDir, QUrl
 )
 
 from WhiteboardApplication.UI.board import Ui_MainWindow
@@ -119,6 +118,11 @@ class BoardScene(QGraphicsScene):
         self.addItem(text_box_item)
         self.add_item_to_undo(text_box_item)  # For complex items, group with handles if needed
         print("TextBox added to scene:", text_box_item)
+
+    # def add_shape(self, shape_item):
+    #     self.addItem(shape_item)
+    #     self.add_item_to_undo(shape_item)  # For complex items, group with handles if needed
+    #     print("Shape added to scene:", shape_item)
 
     def add_image(self, pixmap_item):
         self.addItem(pixmap_item)
@@ -220,7 +224,7 @@ class BoardScene(QGraphicsScene):
                 elif self.active_tool == "cursor":
                     print("Cursor active")
                     self.drawing = False
-        elif event.button() == Qt.RightButton:
+        elif event.button() == Qt.LeftButton:
             self.active_tool = "highlighter"
             self.drawing = False
             self.highlight(event.scenePos())
@@ -272,6 +276,24 @@ class BoardScene(QGraphicsScene):
     def set_active_tool(self, tool):
         self.active_tool = tool
 
+    # def shapes_menu(self):
+    #     shapes_menu = QMenu()
+    #     ellipse_action = shapes_menu.addAction("Ellipse")
+    #     rectangle_action = shapes_menu.addAction("Rectangle")
+    #
+    #     # Execute the menu and capture the action
+    #     action = shapes_menu.exec(QCursor.pos())
+    #
+    #     if action == ellipse_action:
+    #         self.shape_selected = "ellipse"
+    #     elif action == rectangle_action:
+    #         self.shape_selected = "rectangle"
+    #
+    # def get_shape_selected(self):
+    #     return self.shape_selected
+
+
+
 class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __init__(self):
@@ -289,20 +311,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionSave.triggered.connect(self.save)
         self.actionLoad.triggered.connect(self.load)
         self.actionNew.triggered.connect(self.new_tab)
+        self.actionDocument.triggered.connect(self.display_help_doc)
 
         ############################################################################################################
         # Ensure all buttons behave properly when clicked
-        self.list_of_buttons = [self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser, self.tb_actionVideos]
+        self.list_of_buttons = [self.tb_actionCursor, self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser]
 
-        self.tb_actionPen.setChecked(True)
+        self.tb_actionCursor.triggered.connect(self.button_clicked)
         self.tb_actionPen.triggered.connect(self.button_clicked)
         self.tb_actionHighlighter.triggered.connect(self.button_clicked)
         self.tb_actionEraser.triggered.connect(self.button_clicked)
 
         #sharon helped me out by showing this below
         self.tb_actionText.triggered.connect(self.create_text_box)
+        # self.tb_actionShapes.triggered.connect(self.shapes)
         #self.toolbar_actionLine.triggered.connect(self.tb_Line)
-        #self.tb_actionEraser.triggered.connect(self.button_clicked)
+        self.tb_actionEraser.triggered.connect(self.button_clicked)
         self.tb_actionPen.triggered.connect(self.button_clicked)
 
 
@@ -348,6 +372,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.new_tab()
 
+        self.tb_actionPen.setChecked(True)
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+
     #Upload Image
     def upload_image(self):
         print("Image Button clicked")
@@ -367,7 +394,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def open_video_player(self):
         # print("video button clicked")   #debug
         #create the player from board scene
-        self.scene.open_video_player()
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().open_video_player()
 
     # this finds the current tab and locates the canvas
     # inside that tab to access its scene
@@ -376,6 +403,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def redo(self):
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().redo()
+
+    # def shapes(self):
+    #     self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().shapes_menu()
 
     def clear_canvas(self):
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().clear()
@@ -403,7 +433,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def eraseObject_action(self):
         print("Erase Object action")
         print("Eraser activated")  # Debugging print
-        self.scene.set_active_tool("eraser")
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("eraser")
         self.tb_actionPen.setChecked(False)  # Ensure pen is not active
         self.tb_actionCursor.setChecked(False)
 
@@ -414,7 +444,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Enable pen mode, disable eraser
         print("Pen activated")  # Debugging print
         self.color_changed(self.eraser_color)
-        self.scene.set_active_tool("pen")
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
         self.tb_actionEraser.setChecked(False)  # Ensure eraser is not active
         self.tb_actionCursor.setChecked(False)
 
@@ -439,6 +469,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 print("Pen activated")  # Debugging print
                 # self.color_changed(self.current_color)
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+                self.color_changed(self.current_color)
                 self.tb_actionEraser.setChecked(False)  # Ensure eraser is not active
                 self.tb_actionCursor.setChecked(False)
                 self.tb_actionHighlighter.setChecked(False)
@@ -466,20 +497,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.tb_actionHighlighter.isChecked():
                 # Enable highlighter mode, disable pen & eraser
                 print("Highlighter activated")  # Debugging print
-                self.scene.set_active_tool("highlighter")
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("highlighter")
                 self.tb_actionPen.setChecked(False)  # Ensure pen is not active
                 self.tb_actionCursor.setChecked(False)
                 self.tb_actionEraser.setChecked(False)
             else:
                 # Deactivate erasing mode when button is clicked again
                 print("Highlighter deactivated")  # Debugging print
-                self.scene.set_active_tool(None)
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(None)
 
     #Adds a text box using the method in BoardScene
     def create_text_box(self):
         # Create a text box item and add it to the scene
         text_box_item = TextBox()
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_text_box(text_box_item)
+
+    ## Was unable to implement this during the duration of the last sprint.
+    # def create_shape(self):
+    #     if BoardScene.get_shape_selected == "rectangle":
+    #         shape_item = QGraphicsRectItem(0, 0, 40, 20)
+    #     elif BoardScene.get_shape_selected == "ellipse":
+    #         shape_item = QGraphicsEllipseItem(0, 0, 40, 20)
+    #     self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_shape(shape_item)
 
     # def change_background_color(self):
     #     # Open a color board and set the background color
@@ -500,6 +539,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if enable:
             self.erasing_enabled = False
             self.drawing_enabled = False
+
+    def display_help_doc(self):
+        path = os.getcwd()
+        path += "\\PDFs\\Help_Document.pdf"
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def save(self):
         directory, _filter = QFileDialog.getSaveFileName(self, "Save as Pickle", '', "Pickle (*.pkl)")
