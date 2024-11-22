@@ -225,7 +225,7 @@ class BoardScene(QGraphicsScene):
                 elif self.active_tool == "cursor":
                     print("Cursor active")
                     self.drawing = False
-        elif event.button() == Qt.LeftButton:
+        elif event.button() == Qt.RightButton:
             self.active_tool = "highlighter"
             self.drawing = False
             self.highlight(event.scenePos())
