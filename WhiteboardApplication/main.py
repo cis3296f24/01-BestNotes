@@ -40,6 +40,7 @@ from PySide6.QtCore import (
 from WhiteboardApplication.UI.board import Ui_MainWindow
 from WhiteboardApplication.text_box import TextBox
 from WhiteboardApplication.new_notebook import NewNotebook
+from WhiteboardApplication.resize_handle_image import ResizablePixmapItem
 from WhiteboardApplication.video_player import MediaPlayer
 from WhiteboardApplication.Collab_Functionality.client import Client
 
@@ -302,7 +303,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.client = None
 
-        if hasattr(self, 'actionImages'):
+        if hasattr(self, 'tb_actionImages'):
             print("actionImages is initialized.")
         else:
             print("actionImages is NOT initialized.")
@@ -383,13 +384,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             pixmap = QPixmap(file_name)
             if not pixmap.isNull():
                 pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
-                pixmap_item = QGraphicsPixmapItem(pixmap)
-                pixmap_item.setPos(0, 0)  # Adjust position as needed
-                pixmap_item.setFlag(QGraphicsPixmapItem.ItemIsMovable)
-                # add it to new method in board scene self.scene.add_image(pixmap_item)
-                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_image(pixmap_item)
-                #self.scene.addItem(pixmap_item)  # Add the image to the scene
-                #self.add_item_to_undo(pixmap_item)
+                pixmap_item = ResizablePixmapItem(pixmap)
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().addItem(pixmap_item)
 
     def open_video_player(self):
         # print("video button clicked")   #debug
