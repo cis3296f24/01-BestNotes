@@ -29,15 +29,37 @@ class BoardScene(QGraphicsScene):
 
         # Collaboration client setup
         #self.collab_client = CollabClient(board_scene=self)
-        self.collab_client = CollabClient()
+        self.username = None
+        self.collab_client = None  # Use passed client or create a new one
+        self.collab_server = None  # Default to None
         self.collaborators = []  # List of active collaborators
 
-        self.setup_collaboration()
+    def set_username(self, username):
+        """Sets the username and initializes collaboration setup."""
+        self.username = username
+        print(f"Username set for BoardScene: {username}")
 
+        # Trigger collaboration setup now that username is set
+        #self.setup_collaboration()
+
+    def set_collab_client(self, collab_client):
+        print("Collab client set same as main")
+        self.collab_client = collab_client
+
+        self.setup_collaboration()
+        
     def setup_collaboration(self):
+        """Connect the collaboration client."""
+        if not self.username:
+            print("Error: Username not set. Cannot initialize collaboration.")
+            return
+
         try:
-            self.collab_client.connect()
-            print("Collaboration client connected.")
+            # Ensure collab_client is set and connected
+            if self.collab_client and self.collab_client.connect_to_discovery_server():
+                print(f"Collaboration client connected successfully as {self.username}.")
+            else:
+                print("Collaboration client failed to connect.")
         except Exception as e:
             print(f"Error setting up collaboration: {e}")
 

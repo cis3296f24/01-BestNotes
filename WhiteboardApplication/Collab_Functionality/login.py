@@ -1,43 +1,78 @@
 import sys
 import sqlite3
 import bcrypt
-import json
 import threading
+import socket
+import time
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QPainter, QColor, QLinearGradient
-from WhiteboardApplication.Collab_Functionality.collab_manager import CollabServer, CollabClient
-from WhiteboardApplication.main import MainWindow
-from WhiteboardApplication.board_scene import BoardScene
+from WhiteboardApplication.main2 import MainWindow
+from WhiteboardApplication.Collab_Functionality.discover_server import start_discovery_server
+from WhiteboardApplication.Collab_Functionality.utils import ensure_discovery_server
+import logging
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
-# Database initialization
+# Check if discovery server is running
+def is_discovery_server_running(host="127.0.0.1", port=9000):
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            return True
+    except (socket.timeout, ConnectionRefusedError):
+        return False
+
+def ensure_user_registered_with_discovery_server(self, username):
+    try:
+        # Check if the server is running before connecting
+        with socket.create_connection(('localhost', 9000)) as sock:
+            print("Connected to discovery server")
+            # Continue with registration logic...
+    except ConnectionRefusedError as e:
+        print("Error: Could not connect to the discovery server. Is it running?")
+        # Handle the case where the server is not available (maybe retry or alert the user)
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
+def ensure_discovery_server():
+    if not is_discovery_server_running():
+        logger.info("Discovery server is not running. Starting it now...")
+        threading.Thread(target=start_discovery_server, daemon=True).start()
+        time.sleep(1)  # Give the server a moment to start
+    else:
+        logger.info("Discovery server is already running.")
+
+# Sets up the sqlite database to hold user information
 def init_database():
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
+
+    # Creates table if it doesn't already exist
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password TEXT NOT NULL
-        )
-    """)
+    CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password TEXT NOT NULL,
+        ip_address TEXT,
+        port INTEGER)""")
+
     conn.commit()
     return conn
 
-
-# Password encryption
+# Encrypts password with bcrypt
 def encrypt_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-
+# Verifies entered password against the stored hash
 def check_password(stored_hash, password):
     try:
+        # Check if the entered password matches the stored hash
         return bcrypt.checkpw(password.encode(), stored_hash.encode())
     except Exception as e:
-        print(f"Password check error: {e}")
+        # General exception handler for unexpected errors
+        print(f"Error during password check: {e}")
         return False
 
-
+# Login Window
 class LoginWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,8 +80,6 @@ class LoginWindow(QWidget):
         # Creates window
         self.setWindowTitle("Login")
         self.setMinimumSize(1060, 702)
-
-        self.client = None
 
         # Layout setup
         layout = QVBoxLayout()
@@ -85,114 +118,210 @@ class LoginWindow(QWidget):
         layout.addWidget(self.register_button)
 
         self.setLayout(layout)
-
-        self.setLayout(layout)
         self.db_conn = init_database()
-        self.client = CollabClient()
 
+    # Draws and resizes the background color
     def paintEvent(self, event):
         gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0.0, QColor(30, 30, 30))
-        gradient.setColorAt(1.0, QColor(70, 70, 250))
+        gradient.setColorAt(0.0, QColor(0, 0, 0))  # Black
+        gradient.setColorAt(1.0, QColor(65, 105, 225))  # Royal Blue at the bottom
 
         painter = QPainter(self)
         painter.setBrush(gradient)
-        painter.drawRect(self.rect())
+        painter.drawRect(self.rect())  # Fill the entire widget with the gradient
+
         super().paintEvent(event)
 
-    '''
     def login(self):
         username = self.username_input.text()
         password = self.password_input.text()
         cursor = self.db_conn.cursor()
+
+        # Check if user exists in local database
         cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
         result = cursor.fetchone()
 
-        if result and check_password(result[0], password):
-            self.client = CollabClient()  # Initialize the client on successful login
-
-            try:
-                self.client.connect()  # Attempt to connect to the server
-                self.client.send(f"LOGIN {username}")  # Send login message
-                QMessageBox.information(self, "Login Successful", "Welcome!")
-                self.parent().show_whiteboard(self.client)  # Pass client to parent
-            except Exception as e:
-                QMessageBox.critical(self, "Connection Failed", f"Error: {e}")
+        if result:
+            stored_password = result[0]
+            if check_password(stored_password, password):
+                # After successful login, ensure the user is registered with the discovery server
+                self.ensure_user_registered_with_discovery_server(username)
+                QMessageBox.information(self, "Login Success", "Welcome!")
+                self.parent().show_whiteboard(username)
+            else:
+                QMessageBox.warning(self, "Login Failed", "Invalid password. (login)")
         else:
-            QMessageBox.warning(self, "Login Failed", "Invalid username or password.")
-    '''
-
-    def login(self):
-        username = self.username_input.text()
-        password = self.password_input.text()
-        cursor = self.db_conn.cursor()
-        cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
-        result = cursor.fetchone()
-
-        if result and check_password(result[0], password):
-            self.client = CollabClient()  # Initialize the client on successful login
-
-            try:
-                self.client.connect()  # Attempt to connect to the server
-                self.client.send(f"LOGIN {username}")  # Send login message
-                QMessageBox.information(self, "Login Successful", "Welcome!")
-                self.parent().show_whiteboard(self.client)  # Pass client to parent
-            except Exception as e:
-                QMessageBox.critical(self, "Connection Failed", f"Error: {e}")
-        else:
-            QMessageBox.warning(self, "Login Failed", "Invalid username or password.")
+            QMessageBox.warning(self, "Login Failed", "User not found. (login)")
 
     def register(self):
         username = self.username_input.text()
         password = self.password_input.text()
+        port = self.get_user_port()
+        ip_address = socket.gethostbyname(socket.gethostname())
+
+        if port is None:
+            QMessageBox.warning(self, "Error", "Unable to retrieve user port. Please try again. (login)")
+            return
+
         cursor = self.db_conn.cursor()
 
+        # Insert user into local database (users.db)
         try:
-            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)",
-                           (username, encrypt_password(password)))
+            cursor.execute(
+            "INSERT INTO users (username, password, ip_address, port) VALUES (?, ?, ?, ?)",
+            (username, encrypt_password(password), ip_address, port)
+            )
             self.db_conn.commit()
-            QMessageBox.information(self, "Registration Successful", "User registered!")
+            QMessageBox.information(self, "Registration Success", "User registered successfully!")
+
+            # After registration, register user with the discovery server
+            self.register_with_discovery_server(username, ip_address, port)
+
         except sqlite3.IntegrityError:
-            QMessageBox.warning(self, "Registration Failed", "Username already exists.")
+            QMessageBox.warning(self, "Error", "Username already exists.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred (login): {e}")
 
+    def register_with_discovery_server(self, username, ip_address, port):
+        try:
+            # Send REGISTER command to discovery server
+            with socket.create_connection(('localhost', 9000)) as sock:
+                sock.sendall(f"REGISTER {username} {port}\n".encode())
+                response = sock.recv(1024).decode().strip()
+                if response == "OK":
+                    print(f"User {username} registered successfully with discovery server. (login)")
+                else:
+                    print(f"Error registering user {username} with discovery server (login): {response}")
+        except Exception as e:
+            print(f"Error connecting to discovery server (login): {e}")
 
+    def ensure_user_registered_with_discovery_server(self, username):
+        # Send LOOKUP command to discovery server
+        with socket.create_connection(('localhost', 9000)) as sock:
+            sock.sendall(f"LOOKUP {username}\n".encode())
+            response = sock.recv(1024).decode().strip()
+            if response == "NOT_FOUND":
+                print(f"User {username} not registered with discovery server. Registering now...")
+                # Register the user if not found
+                ip_address = socket.gethostbyname(socket.gethostname())
+                port = self.get_user_port()
+                self.register_with_discovery_server(username, ip_address, port)
+            else:
+                print(f"User {username} found on discovery server (login): {response}")
+    '''
+    # Method to log a user in
+    def login(self):
+        # Gets username and password, and sets cursor to search for the credentials
+        username = self.username_input.text()
+        password = self.password_input.text()
+        cursor = self.db_conn.cursor()
+
+        # Checks if the credentials are there
+        cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+
+        if result:
+            stored_password = result[0]
+            if check_password(stored_password, password):  # Correct call to check_password
+                # Get the user's IP and port
+                user_ip = socket.gethostbyname(socket.gethostname())
+                print("IP Address is: "+ user_ip+ "\n")
+                user_port = self.get_user_port()  # Implement logic to get the port
+
+                # Update the user's IP and port in the database
+                cursor.execute("""
+                    UPDATE users
+                    SET ip_address = ?, port = ?
+                    WHERE username = ?
+                """, (user_ip, user_port, username))
+                self.db_conn.commit()
+
+                QMessageBox.information(self, "Login Success", "Welcome!")
+                self.parent().show_whiteboard(username)
+            else:
+                QMessageBox.warning(self, "Login Failed", "Invalid password.")
+        else:
+            QMessageBox.warning(self, "Login Failed", "User not found.")
+
+    # Allows a new user to register their credentials
+    def register(self):
+        # Accepts username and password
+        username = self.username_input.text()
+        password = self.password_input.text()
+        port = self.get_user_port()  # Retrieve the user's port dynamically
+        ip_address = socket.gethostbyname(socket.gethostname())  # Retrieve the user's IP address
+
+        # Check if the port retrieval failed
+        if port is None:
+            QMessageBox.warning(self, "Error", "Unable to retrieve user port. Please try again.")
+            return  # Exit the method to prevent further execution
+
+        cursor = self.db_conn.cursor()
+
+        # Inserts the new credentials and notifies the user of the registration status
+        try:
+            # Encrypt the password and insert username, encrypted password, IP, and port into the database
+            cursor.execute(
+                "INSERT INTO users (username, password, ip_address, port) VALUES (?, ?, ?, ?)",
+                (username, encrypt_password(password), ip_address, port)
+            )
+            self.db_conn.commit()
+            QMessageBox.information(self, "Registration Success", "User registered successfully!")
+
+        # Handles the case where the username already exists
+        except sqlite3.IntegrityError:
+            QMessageBox.warning(self, "Error", "Username already exists.")
+
+        # Handles unexpected errors
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+    '''
+    def get_user_port(self):
+        """
+        Retrieves the port number from which the user is connecting.
+        Returns:
+            int: The port number of the current connection.
+        """
+        # Example logic for retrieving the port
+        try:
+            # Create a temporary socket to determine the port dynamically
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as temp_socket:
+                # Bind the socket to an available port on localhost
+                temp_socket.bind(('localhost', 0))  # Port 0 tells OS to find an available port
+                port = temp_socket.getsockname()[1]  # Retrieve the assigned port
+
+            return port
+        except socket.error as e:
+            print(f"Error retrieving user port (login): {e}")
+            return None  # Or handle error as needed
+
+# Application window, where the application is run from
 class ApplicationWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Collaborative Whiteboard")
-        self.setGeometry(100, 100, 800, 600)
+
+        # Creates the login window, board scene, and main window
         self.login_window = LoginWindow(self)
+        self.main_window = MainWindow()  # Import your MainWindow properly
+
+        # Start with login window
         self.setCentralWidget(self.login_window)
 
-        self.client = None
-
-    def show_whiteboard(self, client):
-        #if self.client:
-        print("Transitioning to whiteboard...")
-        self.main_window = MainWindow()
+    def show_whiteboard(self, username):
+        # Switches to whiteboard once login is done correctly
+        self.username = username
+        print("Username entered by user is: "+ self.username)
+        self.main_window.set_username(username)
         self.setCentralWidget(self.main_window)
-            #self.board_scene = BoardScene()
-            #self.main_window.set_client(self.client)  # Pass the client to the whiteboard
-            #self.close()  # Close the login window
-
-
-def start_server():
-    print("Server started in login")
-    server = CollabServer()
-    server.start()
-
 
 def main():
-    # Start the server in a separate thread
-    server_thread = threading.Thread(target=start_server, daemon=True)
-    server_thread.start()
+    ensure_discovery_server()
 
-    # Start the application
     app = QApplication(sys.argv)
-    window = ApplicationWindow()
-    window.show()
+    main_window = ApplicationWindow()
+    main_window.show()
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()
