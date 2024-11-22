@@ -32,6 +32,9 @@ PDF Instructions for PyCharm: [BestNotes PyCharm Run Instructions.pdf](https://g
 #### IntelliJ instructions
 PDF Instructions: [Best Notes Windows Set Up Instructions.pdf](https://github.com/user-attachments/files/17853642/BestNotes.Windows.Set.Up.Instructions.pdf)
 
+You will need to download python, ideally the latest version. You can download it from the following link:
+https://www.python.org/downloads/
+
 -	First if you don't have IntelliJ, download the IDE IntelliJ, then clone the project into IntelliJ using the repository URL
 -	Then download and install VLC media player: https://www.videolan.org/vlc/
 -	Ensure you have the python plugin downloaded in the IDE
