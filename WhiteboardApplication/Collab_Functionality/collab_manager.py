@@ -3,10 +3,10 @@ import socket
 import threading
 import json
 import os
-from utils import logger
 import time
 import select
 from PySide6.QtCore import QObject, Signal
+from WhiteboardApplication.Collab_Functionality.utils import logger
 
 class CollabServer(QObject):
 
@@ -22,12 +22,13 @@ class CollabServer(QObject):
         self.ssl_cert_path = None
         self.ssl_context = None
         self.discovery_host = discovery_host
-        print(f"Initialized CollabServer with discovery_host: {self.discovery_host}")
+        print(f"Initialized CollabServer with discovery_host (Collab_server): {self.discovery_host}")
 
         self.discovery_port = discovery_port
         self.port = server_port
         self.username = None
         self.server_socket_lock = threading.Lock()
+        self.server_thread = None #Thread to support running server
 
     def load_config(self):
         """Load configuration from a JSON file based on the project directory"""
@@ -38,7 +39,7 @@ class CollabServer(QObject):
             while not os.path.exists(os.path.join(project_root, 'config.json')):
                 project_root = os.path.dirname(project_root)  # Move up one directory
                 if project_root == os.path.dirname(project_root):
-                    raise FileNotFoundError("config.json not found in the project directory.")
+                    raise FileNotFoundError("config.json not found in the project directory. (Collab_server)")
 
             config_path = os.path.join(project_root, 'config.json')
             with open(config_path, 'r') as config_file:
@@ -62,7 +63,7 @@ class CollabServer(QObject):
             print(f"Error (collab_server): {str(e)}")
             return None, None
         except json.JSONDecodeError:
-            print(f"Error: Failed to decode JSON from the config file.")
+            print(f"Error (Collab_server): Failed to decode JSON from the config file.")
             return None, None
 
     def register_with_discovery(self, username):
@@ -73,104 +74,16 @@ class CollabServer(QObject):
             s.sendall(lookup_message.encode())
             response = s.recv(1024).decode().strip()
             if response != "NOT_FOUND":
-                print(f"User {username} is already registered at {response}.")
+                print(f"(Collab_server) User {username} is already registered at {response}.")
                 return True  # User is already registered, skip re-registration
 
             # Proceed with registration if the user is not already registered
             register_message = f"REGISTER {username} {self.port}\n"
             s.sendall(register_message.encode())
             response = s.recv(1024).decode().strip()
-            print(f"Discovery server response: {response}")
+            print(f"Discovery server response (Collab_server) : {response}")
             return response == "OK"
 
-    '''
-    def register_with_discovery(self, username):
-        print(f"Discovery host before validation: {self.discovery_host}")
-
-        if not self.discovery_host:
-            self.discovery_host = "localhost"  # Fallback to default
-
-        self.username = username
-        try:
-            # Ensure discovery_host is a valid string
-            if not isinstance(self.discovery_host, str) or not self.discovery_host:
-                raise ValueError("Invalid discovery host value. Must be a non-empty string.")
-
-            print(f"Discovery host is {self.discovery_host} and port is {self.discovery_port}")
-
-            with socket.create_connection((self.discovery_host, self.discovery_port)) as s:
-                print(f"Connecting to discovery server at {self.discovery_host}:{self.discovery_port}")
-
-                # Send a REGISTER command with username and port
-                register_message = f"REGISTER {username} {self.port}\n"
-                print(f"Sending register message: {register_message}")
-                s.sendall(register_message.encode())
-
-                # Receive response from the discovery server
-                response = s.recv(1024).decode().strip()
-                print(f"Discovery server response: {response}")
-
-                if response != "OK":
-                    print(f"Unexpected response from discovery server: {response}")
-                    return False
-                return True
-
-        except Exception as e:
-            print(f"Discovery server registration error (collab_server): {e}")
-            return False
-    '''
-    '''
-    def start_server(self):
-        """Start the server, binding it to a specific port."""
-        while True:
-            try:
-                # Attempt to create and bind the socket
-                self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.server_socket.bind(('0.0.0.0', self.port))
-                self.server_socket.listen(5)
-                print(f"Server started on port {self.port}")
-                break  # Successfully started the server, exit the loop
-            except OSError as e:
-                if e.errno == 98:  # Port is already in use (Linux/Mac)
-                    print(f"Error: Port {self.port} is already in use, trying a different port.")
-                    self.port += 1  # Increment the port and try again
-                else:
-                    print(f"Error starting server: {e}")
-                    raise  # Re-raise the exception if it's not related to the port
-
-    def start(self, username):
-        # Load SSL configuration before starting the server
-        self.ssl_key_path, self.ssl_cert_path = self.load_config()
-        if not self.ssl_key_path or not self.ssl_cert_path:
-            print("SSL configuration is missing. Server cannot start. (collab_server)")
-            return
-
-        # Register with the discovery server before starting the socket
-        if not self.register_with_discovery(username):
-            print("Failed to register with discovery server. (collab_server)")
-            return
-
-        # Set up SSL context for the server
-        self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        self.ssl_context.load_cert_chain(certfile=self.ssl_cert_path, keyfile=self.ssl_key_path)
-
-        try:
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.server_socket = self.ssl_context.wrap_socket(self.server_socket, server_side=True)
-            self.server_socket.bind(('0.0.0.0', self.port))
-            self.server_socket.listen(5)
-
-            print(f"Server started on port {self.port} with SSL. (collab_server)")
-            while True:
-                client_socket, addr = self.server_socket.accept()
-                print(f"New connection from {addr} (collab_server)")
-                threading.Thread(target=self.handle_client, args=(client_socket,)).start()
-        except Exception as e:
-            print(f"Server error (collab_server): {e}")
-        finally:
-            if self.server_socket:
-                self.server_socket.close()
-    '''
     def check_port_in_use(self, port):
         """Check if a port is in use."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -200,104 +113,11 @@ class CollabServer(QObject):
 
         # Check if the port is in use and increment if necessary
         while self.check_port_in_use(self.port):
-            print(f"Port {self.port} is already in use, trying a different port.")
+            print(f"Port {self.port} is already in use, trying a different port. (Collab_server)")
             self.port += 1  # Increment the port number
 
         # Start the server with SSL wrapping and binding
         self.start_server()
-    '''
-    def start_server(self):
-        """Start the server, binding it to a specific port."""
-        try:
-            # Create the server socket and wrap it with SSL
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.server_socket = self.ssl_context.wrap_socket(self.server_socket, server_side=True)
-
-            # Bind the server to the port
-            self.server_socket.bind(('0.0.0.0', self.port))
-            self.server_socket.listen(5)
-
-            print(f"Server started on port {self.port} with SSL. (collab_server)")
-
-            # Accept client connections and spawn a new thread for each client
-            while True:
-                client_socket, addr = self.server_socket.accept()
-                print(f"New connection from {addr} (collab_server)")
-                threading.Thread(target=self.handle_client, args=(client_socket,)).start()
-
-        except Exception as e:
-            print(f"Server error (collab_server): {e}")
-        finally:
-            if self.server_socket:
-                self.server_socket.close()
-    '''
-    '''
-    def start_server(self):
-        """Start the server and handle graceful shutdown."""
-        try:
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.server_socket.bind(('0.0.0.0', self.port))
-            self.server_socket.listen(5)
-            print(f"Server started on port {self.port}")
-
-            self.running = True
-
-            def server_thread():
-                while self.running:
-                    try:
-                        client_socket, addr = self.server_socket.accept()
-                        print(f"New connection from {addr}")
-                        threading.Thread(target=self.handle_client, args=(client_socket,)).start()
-                    except Exception as e:
-                        if not self.running:
-                            break
-                        print(f"Server error (collab_server): {e}")
-
-            # Start the server in a separate thread
-            threading.Thread(target=server_thread, daemon=True).start()
-
-        except Exception as e:
-            print(f"Server startup error: {e}")
-        finally:
-            self.cleanup()
-    '''
-
-    ''''
-    def start_server(self):
-        """Start the server and handle graceful shutdown."""
-        try:
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Enable port reuse
-            self.server_socket.bind(('0.0.0.0', self.port))
-            self.server_socket.listen(5)
-            print(f"Server started on port {self.port}")
-
-            self.running = True
-
-            def server_thread():
-                while self.running:
-                    try:
-                        if self.server_socket.fileno() == -1:  # Check if the socket is closed
-                            print("Server socket is closed, exiting thread.")
-                            break
-                        client_socket, addr = self.server_socket.accept()
-                        print(f"New connection from {addr}")
-                        threading.Thread(target=self.handle_client, args=(client_socket,)).start()
-                    except Exception as e:
-                        if not self.running:
-                            break
-                        print(f"Server error (collab_server): {e}")
-                    except socket.error as se:
-                        print(f"Socket error occurred: {se}")
-
-            # Start the server in a separate thread
-            threading.Thread(target=server_thread, daemon=True).start()
-
-        except Exception as e:
-            print(f"Server startup error: {e}")
-        finally:
-            self.cleanup()
-    '''
 
     def start_server(self):
         """Start the server and handle graceful shutdown."""
@@ -308,16 +128,16 @@ class CollabServer(QObject):
                 self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Enable port reuse
                 self.server_socket.bind(('0.0.0.0', self.port))
                 self.server_socket.listen(5)
-                print(f"Server started on port {self.port}")
+                print(f"(Collab_server) Server started on port {self.port}")
                 break  # If successful, break the retry loop
             except OSError as e:
-                print(f"Port {self.port} is already in use. Retrying...")
+                print(f"(Collab_server) Port {self.port} is already in use. Retrying...")
                 self.port += 1  # Try the next port number
                 if self.port > 65535:
-                    print("No available ports left to bind.")
+                    print("No available ports left to bind. (Collab_server)")
                     return
             except Exception as e:
-                print(f"Server startup error: {e}")
+                print(f"Server startup error (Collab_server): {e}")
                 return
 
         self.running = True
@@ -325,23 +145,23 @@ class CollabServer(QObject):
 
     def stop_server(self):
         """Stop the server and cleanup resources."""
-        print("Stopping server...")
+        print("(Collab_server) Stopping server...")
         self.running = False
         if self.server_socket:
             try:
-                print("Closing server socket...")
+                print("(Collab_server) Closing server socket...")
                 self.server_socket.close()  # Close the server socket
-                print("Server socket closed.")
+                print("Server socket closed. (Collab_server)")
             except Exception as e:
-                print(f"Error closing server socket: {e}")
+                print(f"Error closing server socket (Collab_server): {e}")
         for client in self.clients:
             try:
-                print(f"Closing client socket: {client}")
+                print(f"Closing client socket (Collab_server): {client}")
                 client.close()  # Close client sockets
             except Exception as e:
-                print(f"Error closing client socket: {e}")
+                print(f"Error closing client socket (Collab_server): {e}")
         self.clients.clear()
-        print("Server stopped.")
+        print("Server stopped.(Collab_server)")
 
     def cleanup(self):
         """Cleanup any resources or threads before exit."""
@@ -351,7 +171,7 @@ class CollabServer(QObject):
             client.close()
 
         self.clients.clear()
-        print("Cleanup completed.")
+        print("Cleanup completed.(Collab_server)")
 
     def handle_client(self, client_socket):
         """Handle client communication."""
@@ -359,89 +179,26 @@ class CollabServer(QObject):
             while self.running:
                 data = client_socket.recv(1024)
                 if not data:
-                    print("Client disconnected.")
+                    print("Client disconnected. (Collab_server)")
                     break  # Exit the loop if client disconnects
-                print(f"Received data: {data}")
+                print(f"Received data (Collab_server): {data}")
                 # Handle the data here
         except Exception as e:
-            print(f"Error handling client: {e}")
+            print(f"Error handling client (Collab_server): {e}")
         finally:
             client_socket.close()
-            print("Client socket closed.")
-        '''
-        """Handle communication with a single client."""
-        print(f"Client connected (collab_server): {client_socket.getpeername()}")
-        self.clientConnected.emit(client_socket)
+            print("Client socket closed. (Collab_server)")
 
-        self.clients.append(client_socket)
-        try:
-            while True:
-                if client_socket.fileno() == -1:  # Check if the socket is closed
-                    break
-                data = client_socket.recv(1024).decode()
-                if data.startswith("LOGIN"):
-                    username = data.split(" ")[1]
-                    print(f"User {username} logged in. (collab_server)")
-                    client_socket.sendall("LOGIN_SUCCESS".encode())
-                elif data:
-                    print(f"Received (collab_server): {data}")
-                    self.broadcast(data, client_socket)
-                else:
-                    break
-        except Exception as e:
-            print(f"Client error (collab_server): {e}")
-        finally:
-            self.clients.remove(client_socket)
-            if client_socket.fileno() != -1:  # Ensure it's still open
-                client_socket.close()
-            print(f"Client disconnected (collab_server): {client_socket.getpeername()}")
-            self.clientDisconnected.emit(client_socket)
-            '''
-
-
-    '''
-    def handle_client(self, client_socket):
-        """Handle communication with a single client."""
-        # Log the new client connection
-        print(f"Client connected (collab_server): {client_socket.getpeername()}")
-
-        # Optional: Trigger the on_client_connected event if defined
-        if hasattr(self, 'on_client_connected'):
-            try:
-                self.on_client_connected(client_socket)
-            except Exception as e:
-                print(f"Error in on_client_connected handler (collab_server): {e}")
-
-        # Add the client socket to the list of active clients
-        self.clients.append(client_socket)
-        try:
-            while True:
-                data = client_socket.recv(1024).decode()
-                if data.startswith("LOGIN"):
-                    username = data.split(" ")[1]
-                    print(f"User {username} logged in. (collab_server)")
-                    client_socket.sendall("LOGIN_SUCCESS".encode())
-                elif data:
-                    print(f"Received (collab_server): {data}")
-                    self.broadcast(data, client_socket)
-                else:
-                    break
-        except Exception as e:
-            print(f"Client error (collab_server): {e}")
-        finally:
-            # Remove the client socket from the list and close the connection
-            self.clients.remove(client_socket)
-            client_socket.close()
-            print(f"Client disconnected (collab_server): {client_socket.getpeername()}")
-    '''
     def broadcast(self, message, sender_socket):
         """Broadcast a message to all clients except the sender."""
         for client in self.clients:
             if client != sender_socket:
                 try:
+                    # Send data in smaller chunks if necessary
                     client.sendall(message.encode())
                 except Exception as e:
                     print(f"Broadcast error (collab_server): {e}")
+                    self.clients.remove(client)
 
     def set_on_client_connected(self, callback):
         self.on_client_connected = callback
@@ -451,6 +208,75 @@ class CollabClient:
         self.discovery_host = discovery_host if isinstance(discovery_host, str) else "localhost"
         self.discovery_port = discovery_port
         self.socket = None
+        self.client_socket = None
+        self.ssl_context = None
+        self.running = False
+
+    def connect_to_host(self, host_address, port, username):
+        """Connect to the host and send initial authentication details."""
+        try:
+            # Create a socket
+            self.client_socket = socket.create_connection((host_address, port), timeout=10)
+
+            # If an SSL context is set, wrap the socket
+            if self.ssl_context:
+                self.client_socket = self.ssl_context.wrap_socket(
+                    self.client_socket,
+                    server_hostname=host_address
+                )
+
+            # Send the username to authenticate with the server
+            auth_message = f"AUTH {username}\n"
+            self.client_socket.sendall(auth_message.encode())
+
+            # Wait for the server's response
+            response = self.client_socket.recv(1024).decode().strip()
+            if response == "OK":
+                print(f"(Collab_client) Successfully connected to {host_address}:{port} as {username}")
+                self.running = True
+
+                # Start a thread to listen for incoming data
+                threading.Thread(target=self._listen_to_server, daemon=True).start()
+                return True
+            else:
+                print(f"Connection failed (Collab_client): {response}")
+                self.client_socket.close()
+                return False
+
+        except socket.timeout:
+            print(f" (Collab_client) Connection to host {host_address}:{port} timed out.")
+            return False
+        except Exception as e:
+            print(f"(Collab_client) Error connecting to host {host_address}:{port} - {e}")
+            if self.client_socket:
+                self.client_socket.close()
+            return False
+
+    def _listen_to_server(self):
+        """Listen for incoming messages from the server."""
+        try:
+            while self.running:
+                data = self.client_socket.recv(1024)
+                if not data:
+                    print("Disconnected from server. (Collab_client)")
+                    self.running = False
+                    break
+
+                # Emit a signal with the received data
+                self.drawingReceived.emit(data)
+        except Exception as e:
+            print(f"Error listening to server (Collab_client): {e}")
+        finally:
+            self.client_socket.close()
+
+    def disconnect(self):
+        """Disconnect from the host."""
+        self.running = False
+        if self.client_socket:
+            try:
+                self.client_socket.close()
+            except Exception as e:
+                print(f"Error closing socket (Collab_client): {e}")
 
     def connect_with_retry(self, username, max_attempts=3):
         for attempt in range(max_attempts):
@@ -556,34 +382,17 @@ class CollabClient:
             # Use select to wait until the socket is ready for writing (i.e., connected)
             ready_to_read, ready_to_write, in_error = select.select([], [client_socket], [], 5)
             if ready_to_write:
-                print(f"Connected to discovery server at {host}:{port}")
+                print(f"(Collab_client)Connected to discovery server at {host}:{port}")
                 response = client_socket.recv(1024).decode()
                 print(f"Server response (Collab_client): {response}")
             else:
-                print("Connection attempt timed out.")
+                print("Connection attempt timed out. (Collab_client)")
 
         except Exception as e:
             print(f"An unexpected error occurred (Collab_client): {e}")
         finally:
             client_socket.close()
 
-    '''
-    def connect_to_discovery_server(self):
-        host = self.discovery_host if isinstance(self.discovery_host, str) else self.get_host_ip()  # Dynamically resolve the host IP
-        port = 9000
-
-        try:
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect((host, port))
-            print(f"(Collab_client) Connected to discovery server at {host}:{port}")
-            response = client_socket.recv(1024).decode()
-            print(f"Server response (Collab_client): {response}")
-            client_socket.close()
-        except ConnectionRefusedError:
-            print("Error (Collab_client) : Connection refused. Ensure the discovery server is running.")
-        except Exception as e:
-            print(f"An unexpected error occurred (Collab_client): {e}")
-    '''
     def send_drawing(self, data):
         try:
             if self.socket:

@@ -154,22 +154,22 @@ class Ui_MainWindow(object):
         font.setBold(True)
         self.tabWidget.setFont(font)
         self.tabWidget.setStyleSheet(u"QTabBar::close-button {\n"
-"    image: url(:Tools/close.png);\n"
-"	margin-left: 7px;\n"
-"	margin-top: 7px;\n"
-"	margin-bottom: 5px\n"
-"}\n"
-"QTabWidget::pane{\n"
-"	border: 2px solid;\n"
-"	border-radius: 5px;\n"
-"}\n"
-"\n"
-"QTabBar{\n"
-"	border-top-right-radius: 10px;\n"
-"	border-top-left-radius: 10px;\n"
-"	border: 2px solid;\n"
-"}\n"
-"")
+                                     "    image: url(:Tools/close.png);\n"
+                                     "	margin-left: 7px;\n"
+                                     "	margin-top: 7px;\n"
+                                     "	margin-bottom: 5px\n"
+                                     "}\n"
+                                     "QTabWidget::pane{\n"
+                                     "	border: 2px solid;\n"
+                                     "	border-radius: 5px;\n"
+                                     "}\n"
+                                     "\n"
+                                     "QTabBar{\n"
+                                     "	border-top-right-radius: 10px;\n"
+                                     "	border-top-left-radius: 10px;\n"
+                                     "	border: 2px solid;\n"
+                                     "}\n"
+                                     "")
         self.tabWidget.setTabsClosable(True)
         self.tabWidget.setMovable(True)
 
@@ -197,7 +197,7 @@ class Ui_MainWindow(object):
         font1.setBold(True)
         self.menubar.setFont(font1)
         self.menubar.setStyleSheet(u"background-color: rgb(141, 200, 216);\n"
-"color: rgb(255, 255, 255);")
+                                   "color: rgb(255, 255, 255);")
         self.menuFile = QMenu(self.menubar)
         self.menuFile.setObjectName(u"menuFile")
         self.menuOptions = QMenu(self.menubar)
@@ -256,6 +256,8 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
 
         self.tabWidget.setCurrentIndex(0)
+
+
         QMetaObject.connectSlotsByName(MainWindow)
     # setupUi
 

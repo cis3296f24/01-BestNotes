@@ -10,6 +10,7 @@ from WhiteboardApplication.main2 import MainWindow
 from WhiteboardApplication.Collab_Functionality.discover_server import start_discovery_server
 from WhiteboardApplication.Collab_Functionality.utils import ensure_discovery_server
 import logging
+import requests
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -153,6 +154,54 @@ class LoginWindow(QWidget):
         else:
             QMessageBox.warning(self, "Login Failed", "User not found. (login)")
 
+    def get_public_ip(self):
+        try:
+            # Use an external service to fetch the public IP
+            response = requests.get('https://api.ipify.org?format=json')
+            response.raise_for_status()  # Raise an error for HTTP issues
+            public_ip = response.json().get('ip')  # Extract the IP from the JSON response
+
+            # Debugging: log the response
+            print(f"Received public IP: {public_ip}")
+
+            return public_ip
+        except requests.RequestException as e:
+            QMessageBox.critical(None, "Error", f"Failed to retrieve public IP address: {e}")
+            return None
+
+    def register(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        port = self.get_user_port()
+        ip_address = self.get_public_ip()
+
+        # Debugging: print or log the retrieved public IP address
+        print(f"Public IP address: {ip_address}")
+
+        if ip_address is None or port is None:
+            QMessageBox.warning(self, "Error", "Unable to retrieve public IP or user port. Please try again.")
+            return
+
+        cursor = self.db_conn.cursor()
+
+        # Insert user into local database (users.db)
+        try:
+            cursor.execute(
+                "INSERT INTO users (username, password, ip_address, port) VALUES (?, ?, ?, ?)",
+                (username, encrypt_password(password), ip_address, port)
+            )
+            self.db_conn.commit()
+            QMessageBox.information(self, "Registration Success", "User registered successfully!")
+
+            # After registration, register user with the discovery server
+            self.register_with_discovery_server(username, ip_address, port)
+
+        except sqlite3.IntegrityError:
+            QMessageBox.warning(self, "Error", "Username already exists.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred (login): {e}")
+
+    '''
     def register(self):
         username = self.username_input.text()
         password = self.password_input.text()
@@ -181,7 +230,7 @@ class LoginWindow(QWidget):
             QMessageBox.warning(self, "Error", "Username already exists.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An unexpected error occurred (login): {e}")
-
+    '''
     def register_with_discovery_server(self, username, ip_address, port):
         try:
             # Send REGISTER command to discovery server
@@ -208,74 +257,7 @@ class LoginWindow(QWidget):
                 self.register_with_discovery_server(username, ip_address, port)
             else:
                 print(f"User {username} found on discovery server (login): {response}")
-    '''
-    # Method to log a user in
-    def login(self):
-        # Gets username and password, and sets cursor to search for the credentials
-        username = self.username_input.text()
-        password = self.password_input.text()
-        cursor = self.db_conn.cursor()
 
-        # Checks if the credentials are there
-        cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
-        result = cursor.fetchone()
-
-        if result:
-            stored_password = result[0]
-            if check_password(stored_password, password):  # Correct call to check_password
-                # Get the user's IP and port
-                user_ip = socket.gethostbyname(socket.gethostname())
-                print("IP Address is: "+ user_ip+ "\n")
-                user_port = self.get_user_port()  # Implement logic to get the port
-
-                # Update the user's IP and port in the database
-                cursor.execute("""
-                    UPDATE users
-                    SET ip_address = ?, port = ?
-                    WHERE username = ?
-                """, (user_ip, user_port, username))
-                self.db_conn.commit()
-
-                QMessageBox.information(self, "Login Success", "Welcome!")
-                self.parent().show_whiteboard(username)
-            else:
-                QMessageBox.warning(self, "Login Failed", "Invalid password.")
-        else:
-            QMessageBox.warning(self, "Login Failed", "User not found.")
-
-    # Allows a new user to register their credentials
-    def register(self):
-        # Accepts username and password
-        username = self.username_input.text()
-        password = self.password_input.text()
-        port = self.get_user_port()  # Retrieve the user's port dynamically
-        ip_address = socket.gethostbyname(socket.gethostname())  # Retrieve the user's IP address
-
-        # Check if the port retrieval failed
-        if port is None:
-            QMessageBox.warning(self, "Error", "Unable to retrieve user port. Please try again.")
-            return  # Exit the method to prevent further execution
-
-        cursor = self.db_conn.cursor()
-
-        # Inserts the new credentials and notifies the user of the registration status
-        try:
-            # Encrypt the password and insert username, encrypted password, IP, and port into the database
-            cursor.execute(
-                "INSERT INTO users (username, password, ip_address, port) VALUES (?, ?, ?, ?)",
-                (username, encrypt_password(password), ip_address, port)
-            )
-            self.db_conn.commit()
-            QMessageBox.information(self, "Registration Success", "User registered successfully!")
-
-        # Handles the case where the username already exists
-        except sqlite3.IntegrityError:
-            QMessageBox.warning(self, "Error", "Username already exists.")
-
-        # Handles unexpected errors
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
-    '''
     def get_user_port(self):
         """
         Retrieves the port number from which the user is connecting.

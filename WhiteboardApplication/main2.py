@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QFileDialog,
     QGraphicsPixmapItem, QWidget, QTabWidget, QAbstractScrollArea, QSizePolicy, QGraphicsView, QHBoxLayout, QGridLayout,
-    QScrollArea, QMessageBox, QDialog
+    QScrollArea, QMessageBox, QDialog, QMenu
 )
 
 from PySide6.QtGui import (
@@ -32,11 +32,11 @@ from PySide6.QtGui import (
     QColor,
     QBrush,
     QAction,
-    QTransform, QBrush, QFont, QPixmap, QImageReader, QCursor
+    QTransform, QBrush, QFont, QPixmap, QImageReader, QCursor, QDesktopServices
 )
 
 from PySide6.QtCore import (
-    Qt, QRectF, QSizeF, QPointF, QSize, QRect, QFile, QIODevice
+    Qt, QRectF, QSizeF, QPointF, QSize, QRect, QFile, QIODevice, QUrl
 )
 
 import ssl
@@ -51,6 +51,7 @@ from WhiteboardApplication.database import UserDatabase
 from WhiteboardApplication.collab_dialogs import HostDialog, JoinDialog, UserRegistry
 from WhiteboardApplication.Collab_Functionality.collab_manager import CollabServer, CollabClient
 from WhiteboardApplication.Collab_Functionality.discover_server import start_discovery_server
+from WhiteboardApplication.resize_handle_image import ResizablePixmapItem
 
 class MainWindow(QMainWindow, Ui_MainWindow):
 
@@ -77,6 +78,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionSave.triggered.connect(self.save)
         self.actionLoad.triggered.connect(self.load)
         self.actionNew.triggered.connect(self.new_tab)
+        self.actionDocument.triggered.connect(self.display_help_doc)
 
         #Menu Bar: Hosting and Joining
         # Add collab-related members
@@ -96,9 +98,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         ############################################################################################################
         # Ensure all buttons behave properly when clicked
-        self.list_of_buttons = [self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser]
+        self.list_of_buttons = [self.tb_actionCursor, self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser]
 
-        self.tb_actionPen.setChecked(True)
+        self.tb_actionCursor.triggered.connect(self.button_clicked)
         self.tb_actionPen.triggered.connect(self.button_clicked)
         self.tb_actionHighlighter.triggered.connect(self.button_clicked)
         self.tb_actionEraser.triggered.connect(self.button_clicked)
@@ -107,6 +109,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tb_actionText.triggered.connect(self.create_text_box)
         self.tb_actionEraser.triggered.connect(self.button_clicked)
         self.tb_actionPen.triggered.connect(self.button_clicked)
+        #self.tb_actionVideos.triggered.connect(self.scene.open_video_player)
+
+        #fixing the eraser shit I messed up - RS
+        menu = QMenu()
+        menu.addAction("Erase Object", self.eraseObject_action)
+        menu.addAction("Pen Eraser", self.penEraser_action)
+        self.tb_actionEraser.setMenu(menu)
+
+        self.eraser_color = QColor("#F3F3F3")
 
         self.current_color = QColor("#000000")
 
@@ -127,6 +138,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.new_tab()
 
+        self.tb_actionPen.setChecked(True)
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+
     def set_username(self, username):
         """Pass the username to BoardScene and other components."""
         self.username = username
@@ -139,7 +153,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         print("Collab client passed main")
         self.scene.set_collab_client(collab_client)
 
-    #Upload Image
     def upload_image(self):
         print("Image Button clicked")
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.bmp)")
@@ -147,12 +160,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             pixmap = QPixmap(file_name)
             if not pixmap.isNull():
                 pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
-                pixmap_item = QGraphicsPixmapItem(pixmap)
-                pixmap_item.setPos(0, 0)  # Adjust position as needed
-                pixmap_item.setFlag(QGraphicsPixmapItem.ItemIsMovable)
-                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_image(pixmap_item)
+                pixmap_item = ResizablePixmapItem(pixmap)
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().addItem(pixmap_item)
 
-    # this finds the current tab and locates the canvas
+    def open_video_player(self):
+        # print("video button clicked")   #debug
+        #create the player from board scene
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().open_video_player()
+
+
     # inside that tab to access its scene
     def undo(self):
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().undo()
@@ -162,6 +178,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def clear_canvas(self):
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().clear()
+
+    def color_changed(self, color):
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().change_color(color)
+
+    #adding back in eraser menu functions - RS
+    def eraseObject_action(self):
+        print("Erase Object action")
+        print("Eraser activated")  # Debugging print
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("eraser")
+        self.tb_actionPen.setChecked(False)  # Ensure pen is not active
+        self.tb_actionCursor.setChecked(False)
+
+    def penEraser_action(self):
+        print("Pen Eraser action")
+        # Enable pen mode, disable eraser
+        print("Pen activated")  # Debugging print
+        self.color_changed(self.eraser_color)
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+        self.tb_actionEraser.setChecked(False)  # Ensure eraser is not active
+        self.tb_actionCursor.setChecked(False)
 
     #Depending on which button is clicked, sets the appropriate flag so that operations
     #don't overlap
@@ -183,7 +219,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.tb_actionPen.isChecked():
                 # Enable pen mode, disable eraser
                 print("Pen activated")  # Debugging print
+                # self.color_changed(self.current_color)
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+                self.color_changed(self.current_color)
                 self.tb_actionEraser.setChecked(False)  # Ensure eraser is not active
                 self.tb_actionCursor.setChecked(False)
                 self.tb_actionHighlighter.setChecked(False)
@@ -211,20 +249,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.tb_actionHighlighter.isChecked():
                 # Enable highlighter mode, disable pen & eraser
                 print("Highlighter activated")  # Debugging print
-                self.scene.set_active_tool("highlighter")
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("highlighter")
                 self.tb_actionPen.setChecked(False)  # Ensure pen is not active
                 self.tb_actionCursor.setChecked(False)
                 self.tb_actionEraser.setChecked(False)
             else:
                 # Deactivate erasing mode when button is clicked again
                 print("Highlighter deactivated")  # Debugging print
-                self.scene.set_active_tool(None)
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(None)
 
     #Adds a text box using the method in BoardScene
     def create_text_box(self):
         # Create a text box item and add it to the scene
         text_box_item = TextBox()
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_text_box(text_box_item)
+
 
     def enable_eraser(self, enable):
         self.erasing_enabled = enable
@@ -238,6 +277,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if enable:
             self.erasing_enabled = False
             self.drawing_enabled = False
+
+    def display_help_doc(self):
+        path = os.getcwd()
+        path += "\\PDFs\\Help_Document.pdf"
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def save(self):
         directory, _filter = QFileDialog.getSaveFileName(self, "Save as Pickle", '', "Pickle (*.pkl)")
@@ -477,7 +521,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error loading config: {e}")
             return {}
 
-
     def host_session(self):
         """Host a collaborative drawing session."""
         dialog = HostDialog(self)
@@ -506,6 +549,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.collab_server = CollabServer(discovery_host=host_ip, server_port=5050)
                 print("Created collab server\n")
                 self.setup_ssl_context(self.collab_server)
+                self.scene.change_color(QColor("#FF0000"))
 
                 # Start the collab server with the correct host IP
                 self.collab_server.start(username=self.username)
@@ -542,6 +586,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
                     # Pass collab_client to BoardScene after it's created
                     self.scene.collab_client = self.collab_client
+                    self.scene.change_color(QColor("#00FF00"))
                 else:
                     QMessageBox.warning(self, "Error", "Failed to join session.")
             except Exception as e:
