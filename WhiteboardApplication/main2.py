@@ -3,6 +3,9 @@ import pickle
 import sys
 import socket
 import threading
+import requests
+import ssl
+import json
 import time
 
 from PySide6.QtWidgets import (
@@ -39,13 +42,9 @@ from PySide6.QtCore import (
     Qt, QRectF, QSizeF, QPointF, QSize, QRect, QFile, QIODevice, QUrl
 )
 
-import ssl
-import json
-
 from WhiteboardApplication.UI.board import Ui_MainWindow
 from WhiteboardApplication.text_box import TextBox
 from WhiteboardApplication.new_notebook import NewNotebook
-from WhiteboardApplication.Collab_Functionality.host_window import HostWindow
 from WhiteboardApplication.board_scene import BoardScene
 from WhiteboardApplication.database import UserDatabase
 from WhiteboardApplication.collab_dialogs import HostDialog, JoinDialog, UserRegistry
@@ -482,17 +481,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         NewNotebook.get_canvas(NewNotebook).setScene(self.scene)
         NewNotebook.get_canvas(NewNotebook).setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-    def set_active_tool(self):
-        """Set the active tool based on the button clicked."""
-        tool_map = {
-            self.tb_actionPen: "pen",
-            self.tb_actionHighlighter: "highlighter",
-            self.tb_actionEraser: "eraser"
-        }
-        for button, tool in tool_map.items():
-            if button.isChecked():
-                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(tool)
-
     def load_config(self):
         try:
             # Get the current directory of the script
@@ -521,6 +509,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error loading config: {e}")
             return {}
 
+    def get_public_ip(self):
+        """Fetch public IP address using an external service."""
+        try:
+            response = requests.get('https://api.ipify.org?format=json')
+            response.raise_for_status()  # Raise an exception if the request failed
+            return response.json().get('ip')  # Extract the public IP from the JSON response
+        except requests.RequestException as e:
+            print(f"Error retrieving public IP: {e}")
+            return None
+
     def host_session(self):
         """Host a collaborative drawing session."""
         dialog = HostDialog(self)
@@ -530,26 +528,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if not self.user_db.user_exists(self.username):
                 self.user_db.add_user(self.username)
 
-            port = self.user_reg.register_host(self.username)
+            #port = self.user_reg.register_host(self.username)
+            port = 5050
             print(f"Port used is {port} \n")
 
             try:
-                # Get the actual network IP address first
-                try:
-                    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                        s.connect(("8.8.8.8", 80))
-                        host_ip = s.getsockname()[0]
-                except Exception as e:
-                    print(f"Could not determine external IP address: {e}")
-                    host_ip = "127.0.0.1"  # Fallback to localhost
+                # Get the public IP address
+                host_ip = self.get_public_ip()  # Use the method to fetch the public IP
+
+                if host_ip is None:
+                    # If we can't get the public IP, fallback to private IP
+                    print("Using localhost (127.0.0.1) due to error fetching public IP")
+                    host_ip = "127.0.0.1"
 
                 print("IP Address found for hosting is " + host_ip + "\n")
-
                 # Now, create the collab server with the correct host IP
-                self.collab_server = CollabServer(discovery_host=host_ip, server_port=5050)
+                collab_server = CollabServer(discovery_host=host_ip, discovery_port=9000)
                 print("Created collab server\n")
                 self.setup_ssl_context(self.collab_server)
-                self.scene.change_color(QColor("#FF0000"))
 
                 # Start the collab server with the correct host IP
                 self.collab_server.start(username=self.username)
@@ -563,7 +559,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to host session: {e}")
 
-
     def join_session(self):
         """Join a collaborative drawing session."""
         dialog = JoinDialog(self)
@@ -575,13 +570,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.user_db.add_user(self.username)
 
             try:
-                host_address, port = self.user_reg.get_host_address(host_username)
+                # Query the discovery server for the host's address and port
+                discovery_host = "localhost"  # Update to your discovery server address if different
+                discovery_port = 9000  # Default discovery server port
 
-                self.collab_client = CollabClient(self)
+                collab_client = CollabClient(discovery_host, discovery_port)
+                host_address, port = collab_client.lookup_host(host_username)
+
+                if not host_address or not port:
+                    QMessageBox.warning(self, "Error", f"Host {host_username} not found on the discovery server.")
+                    return
+
+                # Attempt to connect to the host
+                self.collab_client = CollabClient(discovery_host, discovery_port)
                 self.setup_ssl_context(self.collab_client)
 
+                print(f"Connecting to: {host_address}:{port}")
                 if self.collab_client.connect_to_host(host_address, port, self.username):
-                    self.collab_client.drawingReceived.connect(self._handle_remote_drawing)
                     QMessageBox.information(self, "Connected", f"Joined session at {host_address}:{port}")
 
                     # Pass collab_client to BoardScene after it's created

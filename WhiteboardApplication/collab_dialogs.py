@@ -58,7 +58,7 @@ class UserRegistry:
     REGISTRY_FILE = "session_registry.json"
 
     def __init__(self):
-        self._default_port = 5000
+        self._default_port = 5050
         self._current_port = self._default_port
         self._load_registry()
 
