@@ -1,3 +1,4 @@
+import os
 import sys
 import sqlite3
 import bcrypt
@@ -11,16 +12,24 @@ from WhiteboardApplication.Collab_Functionality.discover_server import start_dis
 from WhiteboardApplication.Collab_Functionality.utils import ensure_discovery_server
 import logging
 import requests
+import pystun3
 import stun
+import random
+from WhiteboardApplication.Collab_Functionality.turn_server import TURN_SERVER, TURN_PASSWORD, TURN_USERNAME
 
 #install pip install pystun3
-
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Check if discovery server is running
-def is_discovery_server_running(host="127.0.0.1", port=9000):
+# Discovery Server Constants
+DISCOVERY_HOST = "127.0.0.1"
+DISCOVERY_PORT = 9000
+
+def is_discovery_server_running(host=DISCOVERY_HOST, port=DISCOVERY_PORT):
+    """
+    Checks if the discovery server is running on the given host and port.
+    """
     try:
         with socket.create_connection((host, port), timeout=2):
             return True
@@ -65,6 +74,22 @@ def ensure_discover_server(self):
     else:
         logger.info("Discovery server is already running.")
 
+#Sets up the database for the discovery server
+def init_discovery_database():
+    conn = sqlite3.connect("discovery_users.db")
+    cursor = conn.cursor()
+
+    # Creates table for discovery registration if it doesn't already exist
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS discovery_users (
+        username TEXT PRIMARY KEY,
+        ip_address TEXT,
+        port INTEGER,
+        turn_info TEXT)""")
+
+    conn.commit()
+    return conn
+
 # Sets up the sqlite database to hold user information
 def init_database():
     conn = sqlite3.connect("users.db")
@@ -99,8 +124,8 @@ def check_password(stored_hash, password):
 class LoginWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        #Creates Login Window GUI
 
-        # Creates window
         self.setWindowTitle("Login")
         self.setMinimumSize(1060, 702)
 
@@ -168,7 +193,7 @@ class LoginWindow(QWidget):
             stored_password = result[0]
             if check_password(stored_password, password):
                 # After successful login, ensure the user is registered with the discovery server
-                self.ensure_user_registered_with_discovery_server(username)
+                self.ensure_user_registered_with_discover_server(username)
                 QMessageBox.information(self, "Login Success", "Welcome!")
                 self.parent().show_whiteboard(username)
             else:
@@ -176,44 +201,37 @@ class LoginWindow(QWidget):
         else:
             QMessageBox.warning(self, "Login Failed", "User not found. (login)")
 
-    def get_public_ip(self):
+    def get_public_ip_stun(self):
         """
-        Retrieves the public IP address and ensures outbound connectivity.
-        Returns:
-            str: Public IP address, or None if unavailable.
+        Retrieves the public IP address and port using a STUN server.
         """
         try:
-            response = requests.get('https://api.ipify.org?format=json', timeout=5)
-            response.raise_for_status()
-            public_ip = response.json().get('ip')
-
-            # Check outbound connectivity
-            with socket.create_connection(("8.8.8.8", 53), timeout=2):
-                return public_ip
+            nat_type, external_ip, external_port = stun.get_ip_info(stun_host="stun.l.google.com", stun_port=19302)
+            logger.info(f"Public IP from STUN: {external_ip}, Port: {external_port}")
+            return external_ip, external_port
         except Exception as e:
-            print(f"Error retrieving or validating public IP: {e}")
-            return None
+            logger.error(f"STUN failed: {e}")
+            return None, None
 
-    '''
     def get_public_ip(self):
-        try:
-            # Use an external service to fetch the public IP
-            response = requests.get('https://api.ipify.org?format=json')
-            response.raise_for_status()  # Raise an error for HTTP issues
-            public_ip = response.json().get('ip')  # Extract the IP from the JSON response
+        """
+        Attempts to retrieve the public IP address using STUN or a fallback service.
+        """
+        public_ip, public_port = self.get_public_ip_stun()
+        if not public_ip:
+            try:
+                response = requests.get('https://api.ipify.org?format=json', timeout=5)
+                response.raise_for_status()
+                public_ip = response.json().get('ip')
+                logger.info(f"Public IP from fallback: {public_ip}")
+            except Exception as e:
+                logger.error(f"Failed to get public IP via fallback: {e}")
+        return public_ip
 
-            # Debugging: log the response
-            print(f" (login) Received public IP (login): {public_ip}")
-
-            return public_ip
-        except requests.RequestException as e:
-            QMessageBox.critical(None, "Error", f"Failed to retrieve public IP address: {e}")
-            return None
-    '''
     def register(self):
         username = self.username_input.text()
         password = self.password_input.text()
-        port = self.get_user_port()
+        port = self.get_turn_port()
         ip_address = self.get_public_ip()
 
         # Debugging: print or log the retrieved public IP address
@@ -244,53 +262,74 @@ class LoginWindow(QWidget):
             QMessageBox.critical(self, "Error", f"An unexpected error occurred (login): {e}")
 
     def register_with_discovery_server(self, username, ip_address, port):
+        """
+        Registers the user with the discovery server, including TURN details.
+        """
         if not ip_address or not port:
-            print(f"Invalid registration details: IP {ip_address}, Port {port}")
+            logger.warning("Invalid IP or port for registration.")
             return
 
+        # Store information in discovery_users.db
+        conn = init_discovery_database()
+        cursor = conn.cursor()
+
+        turn_info = f"{TURN_SERVER} {TURN_USERNAME} {TURN_PASSWORD}"
+
         try:
-            with socket.create_connection(('localhost', 9000)) as sock:
-                sock.sendall(f"REGISTER {username} {ip_address} {port}\n".encode())
+            # Store in discovery-specific database
+            cursor.execute(
+                "INSERT OR REPLACE INTO discovery_users (username, ip_address, port, turn_info) VALUES (?, ?, ?, ?)",
+                (username, ip_address, port, turn_info))
+            conn.commit()
+
+            # Optionally, send the registration details to the discovery server
+            with socket.create_connection((DISCOVERY_HOST, DISCOVERY_PORT)) as sock:
+                register_message = f"REGISTER {username} {ip_address} {port} {turn_info}\n"
+                sock.sendall(register_message.encode())
                 response = sock.recv(1024).decode().strip()
                 if response == "OK":
-                    print(f"User {username} registered successfully with discovery server.")
+                    logger.info(f"Successfully registered {username} with discovery server.")
                 else:
-                    print(f"Error registering user {username} with discovery server: {response}")
+                    logger.error(f"Registration failed: {response}")
         except Exception as e:
-            print(f"Error connecting to discovery server: {e}")
+            logger.error(f"Error during discovery registration: {e}")
+        finally:
+            cursor.close()
+            conn.close()
 
-    def ensure_user_registered_with_discovery_server(self, username):
-        # Send LOOKUP command to discovery server
-        with socket.create_connection(('localhost', 9000)) as sock:
-            sock.sendall(f"LOOKUP {username}\n".encode())
-            response = sock.recv(1024).decode().strip()
-            if response == "NOT_FOUND":
-                print(f"(login) User {username} not registered with discovery server. Registering now...")
-                # Register the user if not found
-                ip_address = socket.gethostbyname(socket.gethostname())
-                port = self.get_user_port()
-                self.register_with_discovery_server(username, ip_address, port)
-            else:
-                print(f"User {username} found on discovery server (login): {response}")
-
-    def get_user_port(self):
+    def ensure_user_registered_with_discover_server(self, username):
         """
-        Retrieves an available port and ensures it's connectable from external entities.
-        Returns:
-            int: An open port, or None if no valid port is found.
+        Ensure the user is registered with the discovery server if not already.
+        """
+        try:
+            with socket.create_connection((DISCOVERY_HOST, DISCOVERY_PORT)) as sock:
+                sock.sendall(f"LOOKUP {username}\n".encode())
+                response = sock.recv(1024).decode().strip()
+
+                if response == "NOT_FOUND":
+                    ip_address = self.get_public_ip()
+                    port = self.get_turn_port()
+                    self.register_with_discovery_server(username, ip_address, port)
+                else:
+                    logger.info(f"{username} is already registered with the discovery server.")
+        except Exception as e:
+            logger.error(f"Discovery server lookup failed: {e}")
+
+    def get_turn_port(self):
+        """
+         Gets a local port for outbound TURN server communication.
+         Returns: int - An available local port
         """
         try:
             # Create a socket to find an available port
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as temp_socket:
-                temp_socket.bind(('0.0.0.0', 0))  # Bind to any available address/port
-                port = temp_socket.getsockname()[1]
-
-                # Verify connectivity by attempting an external bind
-                with socket.create_connection(("8.8.8.8", 53), timeout=2):  # Check with a reliable public server
-                    return port
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.bind(('', 0))  # Binds to any available port
+                _, port = s.getsockname()
+                return port
         except Exception as e:
-            print(f"Error validating user port: {e}")
-            return None
+            logger.error(f"Error getting local port: {e}")
+            # Fallback to a random port in the dynamic range
+            return random.randint(1024, 65535)
 
 # Application window, where the application is run from
 class ApplicationWindow(QMainWindow):

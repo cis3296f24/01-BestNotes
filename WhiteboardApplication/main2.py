@@ -509,6 +509,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error loading config: {e}")
             return {}
 
+    '''
     def get_public_ip(self):
         """Fetch public IP address using an external service."""
         try:
@@ -518,7 +519,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except requests.RequestException as e:
             print(f"Error retrieving public IP: {e}")
             return None
-
+    '''
+    '''
     def host_session(self):
         """Host a collaborative drawing session."""
         dialog = HostDialog(self)
@@ -542,10 +544,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     host_ip = "127.0.0.1"
 
                 print("IP Address found for hosting is " + host_ip + "\n")
+
                 # Now, create the collab server with the correct host IP
-                collab_server = CollabServer(discovery_host=host_ip, discovery_port=9000)
+                self.collab_server = CollabServer(discovery_host=host_ip, server_port=port)
                 print("Created collab server\n")
                 self.setup_ssl_context(self.collab_server)
+                self.scene.change_color(QColor("#FF0000"))
 
                 # Start the collab server with the correct host IP
                 self.collab_server.start(username=self.username)
@@ -558,6 +562,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to host session: {e}")
+    '''
+    def host_session(self):
+        """Host a collaborative drawing session."""
+        dialog = HostDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.username = dialog.get_username()
+
+            if not self.user_db.user_exists(self.username):
+                self.user_db.add_user(self.username)
+
+            # Retrieve IP and port from the database
+            ip_address, port = self.user_db.get_user_ip_and_port(self.username)
+            if not ip_address or not port:
+                QMessageBox.warning(self, "Error", "Unable to retrieve saved IP or port for the user.")
+                return
+
+            print(f"Using saved IP: {ip_address}, Port: {port}\n")
+
+            try:
+                # Now, create the collab server with the correct IP and port
+                self.collab_server = CollabServer(user_ip=ip_address, user_port=port)
+                print("Created collab server\n")
+                self.setup_ssl_context(self.collab_server)
+                self.scene.change_color(QColor("#FF0000"))  # Host pen color
+
+                # Start the collab server with the correct host IP
+                self.collab_server.start(username=self.username)
+                self.collab_server.clientConnected.connect(self._handle_client_connected)
+                self.collab_server.clientDisconnected.connect(self._handle_client_disconnected)
+                print(f"Server successfully started at {ip_address}:{port}")
+                QMessageBox.information(self, "Hosting", f"Session started at {ip_address}:{port}")
+
+                # Now, pass collab_server to BoardScene after it's created
+                self.scene.collab_server = self.collab_server
+
+            except Exception as e:
+                print(f"Error starting server: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to host session: {e}")
+
 
     def join_session(self):
         """Join a collaborative drawing session."""
@@ -571,8 +614,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             try:
                 # Query the discovery server for the host's address and port
-                discovery_host = "localhost"  # Update to your discovery server address if different
-                discovery_port = 9000  # Default discovery server port
+                discovery_host = "localhost"  # Address of the discovery server
+                discovery_port = 9000  # Port for the discovery service
 
                 collab_client = CollabClient(discovery_host, discovery_port)
                 host_address, port = collab_client.lookup_host(host_username)
@@ -581,20 +624,41 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     QMessageBox.warning(self, "Error", f"Host {host_username} not found on the discovery server.")
                     return
 
-                # Attempt to connect to the host
+                # Initiate connection using WebRTC
                 self.collab_client = CollabClient(discovery_host, discovery_port)
                 self.setup_ssl_context(self.collab_client)
 
                 print(f"Connecting to: {host_address}:{port}")
-                if self.collab_client.connect_to_host(host_address, port, self.username):
-                    QMessageBox.information(self, "Connected", f"Joined session at {host_address}:{port}")
 
-                    # Pass collab_client to BoardScene after it's created
-                    self.scene.collab_client = self.collab_client
-                    self.scene.change_color(QColor("#00FF00"))
-                else:
-                    QMessageBox.warning(self, "Error", "Failed to join session.")
+                # Add retries for connection
+                MAX_RETRIES = 3
+                retry_count = 0
+                success = False
+
+                while retry_count < MAX_RETRIES:
+                    try:
+                        if self.collab_client.connect(host_username):
+                            success = True
+                            break
+                    except Exception as e:
+                        print(f"Connection attempt {retry_count + 1} failed: {e}")
+                        retry_count += 1
+                        time.sleep(2)  # Wait before retrying
+
+                if not success:
+                    QMessageBox.warning(self, "Error", "Failed to join session after multiple attempts.")
+                    return
+
+                # If connection succeeds
+                QMessageBox.information(self, "Connected", f"Joined session at {host_address}:{port}")
+                print(f"Successfully joined session at {host_address}:{port}")
+
+                # Pass collab_client to BoardScene after it's created
+                self.scene.collab_client = self.collab_client
+                self.scene.change_color(QColor("#00FF00"))  # Guest pen color
+
             except Exception as e:
+                print(f"Error during join session: {e}")
                 QMessageBox.warning(self, "Error", f"Failed to join session: {e}")
 
     def setup_ssl_context(self, instance):

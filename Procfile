@@ -1,1 +1,0 @@
-web: gunicorn WhiteboardApplication.Collab_Functionality.server: app
