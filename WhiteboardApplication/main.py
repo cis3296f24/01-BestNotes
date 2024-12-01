@@ -184,6 +184,7 @@ class BoardScene(QGraphicsScene):
         highlight_circle.setPen(Qt.NoPen)
 
         self.addItem(highlight_circle)
+        self.add_item_to_undo(highlight_circle)
         self.highlight_items.append(highlight_circle)
 
     def open_video_player(self):
