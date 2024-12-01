@@ -246,6 +246,7 @@ class BoardScene(QGraphicsScene):
                 my_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 self.pathItem.setPen(my_pen)
                 self.addItem(self.pathItem)
+                self.add_item_to_undo(self.pathItem)
                 self.j += 1
                 if self.j >= len(self.pen_radius_options):
                     self.j = 0
@@ -255,6 +256,7 @@ class BoardScene(QGraphicsScene):
     def mouseMoveEvent(self, event):
         if self.dragging_text_box and self.selected_text_box:
             self.drawing = False
+            # self.highlight_enabled = False
             print("Dragging box")
             delta = event.scenePos() - self.start_pos
             self.selected_text_box.setPos(self.selected_text_box.pos() + delta)
@@ -280,10 +282,11 @@ class BoardScene(QGraphicsScene):
                 # Add the completed path to the undo stack when drawing is finished so it can be deleted or added back with undo
                 self.add_item_to_undo(self.pathItem)
                 print("Path item added to undo stack:", self.pathItem)
-            elif self.highlight:
+            elif self.active_tool == "highlighter":
                 self.add_item_to_undo(self.pathItem)
                 print("Path item added to undo stack:", self.pathItem)
             self.drawing = False
+            # self.highlighting_enabled = False
             self.is_text_box_selected = False
 
         super().mouseReleaseEvent(event)
