@@ -205,6 +205,13 @@ class BoardScene(QGraphicsScene):
                 self.selected_text_box = item
                 self.start_pos = event.scenePos()  # Store the start position for dragging
                 self.dragging_text_box = True
+            elif isinstance(item, ResizablePixmapItem):
+                print("Imaged selected")
+                self.drawing = False
+                #self.is_image_box_selected = True
+                #self.selected_image_box = item
+                #self.start_pos = event.scenePos()
+                #self.dragging_image_box = True
             else:
                 if self.active_tool == "pen":
                     print("Pen tool active")
