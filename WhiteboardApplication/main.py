@@ -330,6 +330,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionLoad.triggered.connect(self.load)
         self.actionNew.triggered.connect(self.new_tab)
         self.actionDocument.triggered.connect(self.display_help_doc)
+        self.actionClose.triggered.connect(sys.exit)
 
         ############################################################################################################
         # Ensure all buttons behave properly when clicked
