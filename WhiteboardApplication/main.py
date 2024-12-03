@@ -57,6 +57,14 @@ class BoardScene(QGraphicsScene):
         self.size = 1
         self.pathItem = None
 
+        # Highlighter
+        self.path_highlighter = None
+        self.previous_position_highlighter = None
+        self.highlighting= False
+        self.color_highlighter = QColor(255, 255, 0, 10)
+        self.size_highlighter = 10
+        self.pathItem_highlighter = None
+
         #Added flags to check which button is being pressed, and if text boxes are being dragged
         self.is_text_box_selected = False
         self.dragging_text_box = False
@@ -175,17 +183,18 @@ class BoardScene(QGraphicsScene):
             elif isinstance(item, QGraphicsPathItem):
                 self.removeItem(item)
 
-    def highlight(self, position):
-        highlight_color = QColor(255, 255, 0, 10)
-        highlight_brush = QBrush(highlight_color)
-        highlight_circle = QGraphicsEllipseItem(position.x() - self.highlight_radius,position.y() - self.highlight_radius,self.highlight_radius * 2,self.highlight_radius * 2)
-
-        highlight_circle.setBrush(highlight_brush)
-        highlight_circle.setPen(Qt.NoPen)
-
-        self.addItem(highlight_circle)
-        self.add_item_to_undo(highlight_circle)
-        self.highlight_items.append(highlight_circle)
+#Pineapple
+    # def highlight(self, position):
+    #     highlight_color = QColor(255, 255, 0, 10)
+    #     highlight_brush = QBrush(highlight_color)
+    #     highlight_circle = QGraphicsEllipseItem(position.x() - self.highlight_radius,position.y() - self.highlight_radius,self.highlight_radius * 2,self.highlight_radius * 2)
+    #
+    #     highlight_circle.setBrush(highlight_brush)
+    #     highlight_circle.setPen(Qt.NoPen)
+    #
+    #     self.addItem(highlight_circle)
+    #     self.add_item_to_undo(highlight_circle)
+    #     self.highlight_items.append(highlight_circle)
 
     def open_video_player(self):
         print("Video button clicked")
@@ -225,9 +234,16 @@ class BoardScene(QGraphicsScene):
                     self.pathItem.setPen(my_pen)
                     self.addItem(self.pathItem)
                 elif self.active_tool == "highlighter":
-                    print("Highlight tool active")
-                    self.drawing = False
-                    self.highlight(event.scenePos())
+                    print("Highlighter tool active")
+                    self.highlighting = True
+                    self.path_highlighter = QPainterPath()
+                    self.previous_position_highlighter = event.scenePos()
+                    self.path_highlighter.moveTo(self.previous_position_highlighter)
+                    self.pathItem_highlighter = QGraphicsPathItem()
+                    my_pen = QPen(self.color_highlighter, self.size_highlighter)
+                    my_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                    self.pathItem_highlighter.setPen(my_pen)
+                    self.addItem(self.pathItem_highlighter)
                 elif self.active_tool == "eraser":
                     print("Eraser tool active")
                     self.drawing = False
@@ -237,9 +253,18 @@ class BoardScene(QGraphicsScene):
                     self.drawing = False
         elif event.button() == Qt.RightButton:
             if self.active_tool == "highlighter":
-                self.highlight_radius = self.highlight_radius_options[self.i]
+                self.highlighting = True
+                self.path_highlighter = QPainterPath()
+                self.previous_position_highlighter = event.scenePos()
+                self.path_highlighter.moveTo(self.previous_position_highlighter)
+                self.pathItem_highlighter = QGraphicsPathItem()
+                self.size_highlighter = self.highlight_radius_options[self.i]
+                my_pen = QPen(self.color_highlighter, self.size_highlighter)
+                my_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                self.pathItem_highlighter.setPen(my_pen)
+                self.addItem(self.pathItem_highlighter)
+                self.add_item_to_undo(self.pathItem_highlighter)
                 self.i += 1
-
                 if self.i >= len(self.highlight_radius_options):
                     self.i = 0
             elif self.active_tool == "pen":
@@ -276,7 +301,10 @@ class BoardScene(QGraphicsScene):
             self.previous_position = curr_position
         elif self.active_tool == "highlighter":
             print("highlighting")
-            self.highlight(event.scenePos())
+            curr_position = event.scenePos()
+            self.path_highlighter.lineTo(curr_position)
+            self.pathItem_highlighter.setPath(self.path_highlighter)
+            self.previous_position_highlighter = curr_position
 
         super().mouseMoveEvent(event)
 
@@ -290,9 +318,10 @@ class BoardScene(QGraphicsScene):
                 self.add_item_to_undo(self.pathItem)
                 print("Path item added to undo stack:", self.pathItem)
             elif self.active_tool == "highlighter":
-                self.add_item_to_undo(self.pathItem)
-                print("Path item added to undo stack:", self.pathItem)
+                self.add_item_to_undo(self.pathItem_highlighter)
+                print("Path item added to undo stack:", self.pathItem_highlighter)
             self.drawing = False
+            self.highlighting = False
             # self.highlighting_enabled = False
             self.is_text_box_selected = False
 
