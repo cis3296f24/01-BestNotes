@@ -13,9 +13,11 @@ import socketserver
 import sqlite3
 import json
 
-#TURN_SERVER =
-#TURN_USERNAME = "your_turn_username"
-#TURN_PASSWORD = "your_turn_password"
+logging.basicConfig(
+    level=logging.DEBUG,  # Set to DEBUG to capture all logs
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]  # Logs will be displayed in the console
+)
 
 class DiscoveryHandler(socketserver.BaseRequestHandler):
     def setup(self):
@@ -28,19 +30,23 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
         self.cursor.close()
         self.db_conn.close()
 
+    # Inside the `handle` method
     def handle(self):
         try:
             # Receive the command and arguments
             data = self.request.recv(1024).decode().strip()
 
             if not data:
-                print(f"Error: No data received (discover_server)")
+                client_address = self.client_address[0]
+                logging.error(
+                    "No data received. Possible issues: network error, client misbehavior, or timeout. "
+                    f"Client address: {client_address}, Socket status: {self.request}")
                 self.request.sendall(b"ERROR: No data received\n")
                 return
 
             command, *args = data.split()
 
-            print(f"(discover_server)Received command: {command} with args: {args}")
+            logging.info(f"Received command: {command} with args: {args} from {self.client_address}")
 
             if command == "REGISTER":
                 if len(args) >= 4:  # We expect at least username, IP, port, and TURN info
@@ -48,9 +54,9 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
                     ip = args[1]
                     port = int(args[2])
                     turn_info = ' '.join(args[3:])  # Combine remaining parts as TURN info
-                    print(f" (discover_server) Registering user {username} at {ip}:{port} with TURN info: {turn_info}")
+                    logging.debug(f"Registering user {username} at {ip}:{port} with TURN info: {turn_info}")
                     if self.lookup_user(username):
-                        print(f"User {username} is already registered. (discover_server)")
+                        logging.warning(f"User {username} is already registered.")
                         self.request.sendall(b"ALREADY_REGISTERED\n")
                     else:
                         self.register_user(username, ip, port, turn_info)
@@ -61,7 +67,7 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
             elif command == "LOOKUP":
                 if len(args) == 1:
                     username = args[0]
-                    print(f"(discover_server) Looking up user {username}")
+                    logging.info(f"Looking up user {username}")
                     result = self.lookup_user(username)
                     if result:
                         ip, port, _ = result  # Ignore TURN info for simplicity
@@ -85,7 +91,7 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
             else:
                 self.request.sendall(b"ERROR: Unknown command\n")
         except Exception as e:
-            print(f"Error handling request (discover_server): {e}")
+            logging.exception(f"Error handling request: {e}")
             self.request.sendall(b"ERROR: Internal server error\n")
 
     def register_user(self, username, ip, port, turn_info):

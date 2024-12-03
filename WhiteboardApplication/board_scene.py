@@ -1,10 +1,24 @@
 import json
+from dataclasses import dataclass
+from typing import List, Dict, Any
+import time
+import asyncio
+import logger
 from PySide6.QtCore import QPointF, QRectF, Qt, QSizeF
 from PySide6.QtGui import QColor, QPen, QPainterPath, QBrush, QTransform
-from PySide6.QtWidgets import QGraphicsScene, QGraphicsPathItem, QGraphicsEllipseItem
+from PySide6.QtWidgets import QGraphicsScene, QGraphicsPathItem, QGraphicsEllipseItem, QMessageBox
 from WhiteboardApplication.Collab_Functionality.collab_manager import CollabServer, CollabClient
 from WhiteboardApplication.text_box import TextBox
 from WhiteboardApplication.video_player import MediaPlayer
+
+#Sends information about actions made by a user so they can be broadcast to everyone else
+@dataclass
+class DrawingAction:
+    """Represents a drawing action that can be serialized and shared."""
+    action_type: str  # 'path', 'erase', 'highlight', 'text'
+    data: Dict[str, Any]
+    timestamp: float
+    user_id: str
 
 class BoardScene(QGraphicsScene):
     def __init__(self):
@@ -35,11 +49,43 @@ class BoardScene(QGraphicsScene):
         self.highlight_radius = 10
 
         # Collaboration client setup
-        #self.collab_client = CollabClient(board_scene=self)
         self.username = None
         self.collab_client = None  # Use passed client or create a new one
         self.collab_server = None  # Default to None
         self.collaborators = []  # List of active collaborators
+
+        self.data_channel = None
+        self.action_buffer = []
+        self.last_sync_timestamp = 0
+        self.remote_paths = {}
+        self.event_loop = None
+
+    def set_collab_client(self, collab_client: CollabClient):
+        """Set up collaboration client and connect signals."""
+        self.collab_client = collab_client
+        self.collab_client.connection_established.connect(self._on_connection_established)
+        self.collab_client.message_received.connect(self.handle_remote_action)
+
+        # Start the async event loop
+        self._event_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._event_loop)
+        self._event_loop.create_task(self.collab_client.start_async())
+
+    def _on_connection_established(self):
+        """Handle successful connection establishment."""
+        logger.info("Drawing connection established")
+        QMessageBox.information(None, "Connected", "Drawing connection established")
+
+    def broadcast_drawing_data(self, data: Dict[str, Any]):
+        """Broadcast drawing data to peers."""
+        if not self.collab_client or not self._event_loop:
+            logger.warning("Collaboration not set up")
+            return
+
+        asyncio.run_coroutine_threadsafe(
+            self.collab_client.send_drawing_data(data),
+            self._event_loop
+        )
 
     def set_username(self, username):
         """Sets the username and initializes collaboration setup."""
@@ -49,26 +95,138 @@ class BoardScene(QGraphicsScene):
         # Trigger collaboration setup now that username is set
         #self.setup_collaboration()
 
+    '''
     def set_collab_client(self, collab_client):
         print("Collab client set same as main")
         self.collab_client = collab_client
 
         self.setup_collaboration()
-        
-    def setup_collaboration(self):
-        """Connect the collaboration client."""
-        if not self.username:
-            print("Error: Username not set. Cannot initialize collaboration.")
-            return
+    '''
 
+    def serialize_action(self, action_type: str, data: Dict[str, Any]) -> str:
+        """Convert a drawing action to JSON string."""
+        action = DrawingAction(
+            action_type=action_type,
+            data=data,
+            timestamp=time.time(),
+            user_id=self.username
+        )
+        return json.dumps({
+            'type': action.action_type,
+            'data': action.data,
+            'timestamp': action.timestamp,
+            'user_id': action.user_id
+        })
+
+    def handle_remote_action(self, message):
+        """Process drawing actions received from other users."""
         try:
-            # Ensure collab_client is set and connected
-            if self.collab_client and self.collab_client.connect_to_discovery_server():
-                print(f"Collaboration client connected successfully as {self.username}.")
-            else:
-                print("Collaboration client failed to connect.")
+            action = json.loads(message)
+
+            # Ignore our own actions
+            if action['user_id'] == self.username:
+                return
+
+            if action['type'] == 'path':
+                self.apply_remote_path(action['data'])
+            elif action['type'] == 'path_start':
+                self.start_remote_path(action['data'])
+            elif action['type'] == 'path_end':
+                self.end_remote_path(action['data'])
+            elif action['type'] == 'erase':
+                self.apply_remote_erase(action['data'])
+            elif action['type'] == 'highlight':
+                self.apply_remote_highlight(action['data'])
+            elif action['type'] == 'highlight_radius_change':
+                self.apply_remote_highlight_radius(action['data'])
+            elif action['type'] == 'text_select':
+                self.apply_remote_text_select(action['data'])
+            elif action['type'] == 'text_move':
+                self.apply_remote_text_move(action['data'])
+            elif action['type'] == 'text_drop':
+                self.apply_remote_text_drop(action['data'])
+
         except Exception as e:
-            print(f"Error setting up collaboration: {e}")
+            print(f"Error handling remote action: {e}")
+
+    def apply_remote_path(self, data):
+        """Apply a remote drawing path."""
+        path = QPainterPath()
+        points = data['points']
+        if points:
+            path.moveTo(points[0][0], points[0][1])
+            for point in points[1:]:
+                path.lineTo(point[0], point[1])
+
+        path_item = QGraphicsPathItem(path)
+        pen = QPen(QColor(data['color']), data['size'])
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        path_item.setPen(pen)
+        self.addItem(path_item)
+        self.add_item_to_undo(path_item)
+
+    def start_remote_path(self, data):
+        """Start a new remote drawing path."""
+        path = QPainterPath()
+        path.moveTo(data['x'], data['y'])
+        path_item = QGraphicsPathItem(path)
+        pen = QPen(QColor(data['color']), data['size'])
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        path_item.setPen(pen)
+        self.addItem(path_item)
+        # Store the path item for future updates
+        self.remote_paths[data['user_id']] = path_item
+
+    def end_remote_path(self, data):
+        """Finish a remote drawing path."""
+        if data['user_id'] in self.remote_paths:
+            path_item = self.remote_paths[data['user_id']]
+            self.add_item_to_undo(path_item)
+            del self.remote_paths[data['user_id']]
+
+    def apply_remote_text_select(self, data):
+        """Handle remote text box selection."""
+        # You might want to highlight the text box or show some visual feedback
+        for item in self.items():
+            if isinstance(item, TextBox) and id(item) == data['text_id']:
+                item.setSelected(True)
+                break
+
+    def apply_remote_text_move(self, data):
+        """Handle remote text box movement."""
+        for item in self.items():
+            if isinstance(item, TextBox) and id(item) == data['text_id']:
+                item.setPos(data['x'], data['y'])
+                break
+
+    def apply_remote_text_drop(self, data):
+        """Handle remote text box drop."""
+        for item in self.items():
+            if isinstance(item, TextBox) and id(item) == data['text_id']:
+                item.setPos(data['x'], data['y'])
+                item.setSelected(False)
+                break
+
+    def apply_remote_highlight_radius(self, data):
+        """Handle remote highlight radius change."""
+        self.highlight_radius = data['radius']
+
+    def apply_remote_erase(self, data):
+        """Apply a remote erase action."""
+        position = QPointF(data['x'], data['y'])
+        self.erase(position)
+
+    def apply_remote_highlight(self, data):
+        """Apply a remote highlight action."""
+        position = QPointF(data['x'], data['y'])
+        self.highlight(position)
+
+    def apply_remote_text(self, data):
+        """Apply a remote text box action."""
+        text_box = TextBox()
+        text_box.setPlainText(data['text'])
+        text_box.setPos(data['x'], data['y'])
+        self.add_text_box(text_box)
 
     def change_color(self, color):
         self.color = color
@@ -125,17 +283,6 @@ class BoardScene(QGraphicsScene):
         print("Restored to undo stack:", item_group)
 
         self.broadcast_drawing_data({})
-
-    def highlight(self, position):
-        highlight_color = QColor(255, 255, 0, 10)
-        highlight_brush = QBrush(highlight_color)
-        highlight_circle = QGraphicsEllipseItem(position.x() - self.highlight_radius,position.y() - self.highlight_radius,self.highlight_radius * 2,self.highlight_radius * 2)
-
-        highlight_circle.setBrush(highlight_brush)
-        highlight_circle.setPen(Qt.NoPen)
-
-        self.addItem(highlight_circle)
-        self.highlight_items.append(highlight_circle)
 
     def open_video_player(self):
         print("Video button clicked")
@@ -225,7 +372,7 @@ class BoardScene(QGraphicsScene):
 
     def mousePressEvent(self, event):
         item = self.itemAt(event.scenePos(), QTransform())
-        print(f"Active Tool: {self.active_tool}")  # Debugging print
+        print(f"Active Tool: {self.active_tool}")
 
         if event.button() == Qt.LeftButton:
             if isinstance(item, TextBox):
@@ -233,8 +380,16 @@ class BoardScene(QGraphicsScene):
                 self.drawing = False
                 self.is_text_box_selected = True
                 self.selected_text_box = item
-                self.start_pos = event.scenePos()  # Store the start position for dragging
+                self.start_pos = event.scenePos()
                 self.dragging_text_box = True
+
+                # Broadcast text box selection
+                self.broadcast_drawing_data({
+                    'type': 'text_select',
+                    'text_id': id(item),  # Use object id as unique identifier
+                    'x': event.scenePos().x(),
+                    'y': event.scenePos().y()
+                })
             else:
                 if self.active_tool == "pen":
                     print("Pen tool active")
@@ -247,17 +402,27 @@ class BoardScene(QGraphicsScene):
                     my_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                     self.pathItem.setPen(my_pen)
                     self.addItem(self.pathItem)
+
+                    # Broadcast initial pen position
+                    self.broadcast_drawing_data({
+                        'type': 'path_start',
+                        'color': self.color.name(),
+                        'size': self.size,
+                        'x': self.previous_position.x(),
+                        'y': self.previous_position.y()
+                    })
                 elif self.active_tool == "highlighter":
                     print("Highlight tool active")
                     self.drawing = False
-                    self.highlight(event.scenePos())
+                    self.highlight(event.scenePos())  # This already broadcasts
                 elif self.active_tool == "eraser":
                     print("Eraser tool active")
                     self.drawing = False
-                    self.erase(event.scenePos())
+                    self.erase(event.scenePos())  # This already broadcasts
                 elif self.active_tool == "cursor":
                     print("Cursor active")
                     self.drawing = False
+
         elif event.button() == Qt.RightButton:
             self.active_tool = "highlighter"
             self.drawing = False
@@ -265,9 +430,14 @@ class BoardScene(QGraphicsScene):
 
             self.highlight_radius = self.highlight_radius_options[self.i]
             self.i += 1
-
             if self.i >= len(self.highlight_radius_options):
                 self.i = 0
+
+            # Broadcast highlight radius change
+            self.broadcast_drawing_data({
+                'type': 'highlight_radius_change',
+                'radius': self.highlight_radius
+            })
 
         super().mousePressEvent(event)
 
@@ -276,16 +446,24 @@ class BoardScene(QGraphicsScene):
             self.drawing = False
             print("Dragging box")
             delta = event.scenePos() - self.start_pos
-            self.selected_text_box.setPos(self.selected_text_box.pos() + delta)
+            new_pos = self.selected_text_box.pos() + delta
+            self.selected_text_box.setPos(new_pos)
             self.start_pos = event.scenePos()
+
+            # Broadcast text box movement
+            self.broadcast_drawing_data({
+            'type': 'text_move',
+            'text_id': id(self.selected_text_box),
+            'x': new_pos.x(),
+            'y': new_pos.y()
+            })
         elif self.drawing:
             print("drawing")
             curr_position = event.scenePos()
             self.path.lineTo(curr_position)
             self.pathItem.setPath(self.path)
-            self.previous_position = curr_position
 
-            # Broadcast drawing data
+            # Broadcast path segment
             self.broadcast_drawing_data({
                 'type': 'path',
                 'color': self.color.name(),
@@ -294,16 +472,10 @@ class BoardScene(QGraphicsScene):
                        (curr_position.x(), curr_position.y())]
             })
 
-            # Send drawing update
-            new_path_segment = self.path  # This represents the updated drawing path
-            self.send_drawing_update(new_path_segment)
-
-            # Update the previous position
             self.previous_position = curr_position
-
         elif self.active_tool == "highlighter":
             print("highlighting")
-            self.highlight(event.scenePos())
+            self.highlight(event.scenePos())  # This already broadcasts
 
         super().mouseMoveEvent(event)
 
@@ -312,24 +484,40 @@ class BoardScene(QGraphicsScene):
             if self.dragging_text_box:
                 print("Finished dragging box")
                 self.dragging_text_box = False
+
+                # Broadcast text box drop
+                final_pos = self.selected_text_box.pos()
+                self.broadcast_drawing_data({
+                    'type': 'text_drop',
+                    'text_id': id(self.selected_text_box),
+                    'x': final_pos.x(),
+                    'y': final_pos.y()
+                })
             elif self.drawing:
-                # Add the completed path to the undo stack when drawing is finished so it can be deleted or added back with undo
                 self.add_item_to_undo(self.pathItem)
                 print("Path item added to undo stack:", self.pathItem)
+
+                # Broadcast path completion
+                self.broadcast_drawing_data({
+                    'type': 'path_end',
+                    'path_id': id(self.pathItem)
+                })
             elif self.highlight:
                 self.add_item_to_undo(self.pathItem)
                 print("Path item added to undo stack:", self.pathItem)
+
+                # Broadcast highlight completion
+                self.broadcast_drawing_data({
+                    'type': 'highlight_end',
+                    'highlight_id': id(self.pathItem)
+                })
+
             self.drawing = False
             self.is_text_box_selected = False
 
         super().mouseReleaseEvent(event)
 
-
-    def broadcast_drawing_data(self, data):
-        """Send drawing data to all collaborators."""
-        for collaborator in self.collaborators:
-            collaborator.send_drawing(data)
-
+    '''
     def apply_remote_drawing(self, drawing_data):
         """Apply drawing data received from collaborators."""
         if drawing_data['type'] == 'drawing':
@@ -346,21 +534,21 @@ class BoardScene(QGraphicsScene):
             path_item = QGraphicsPathItem(path)
             path_item.setPen(pen)
             self.addItem(path_item)
+    '''
 
-    def send_drawing_update(self, path_segment):
-        points = []
-        for i in range(path_segment.elementCount()):
-            element = path_segment.elementAt(i)
-            points.append((element.x, element.y))
+'''
+   def setup_collaboration(self):
+       """Connect the collaboration client."""
+       if not self.username:
+           print("Error: Username not set. Cannot initialize collaboration.")
+           return
 
-        try:
-            self.collab_client.send_drawing({
-                'type': 'drawing',
-                'data': {
-                    'points': points,
-                    'color': self.color.name(),
-                    'size': self.size
-                }
-            })
-        except Exception as e:
-            print(f"Error sending drawing update: {e}")
+       try:
+           # Ensure collab_client is set and connected
+           if self.collab_client and self.collab_client.connect_to_discovery_server():
+               print(f"Collaboration client connected successfully as {self.username}.")
+           else:
+               print("Collaboration client failed to connect.")
+       except Exception as e:
+           print(f"Error setting up collaboration: {e}")
+   '''

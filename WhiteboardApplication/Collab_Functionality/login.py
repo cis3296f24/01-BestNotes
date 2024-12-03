@@ -329,7 +329,7 @@ class LoginWindow(QWidget):
         except Exception as e:
             logger.error(f"Error getting local port: {e}")
             # Fallback to a random port in the dynamic range
-            return random.randint(1024, 65535)
+            return random.randint(5000, 65535)
 
 # Application window, where the application is run from
 class ApplicationWindow(QMainWindow):

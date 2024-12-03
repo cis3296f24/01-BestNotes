@@ -4,9 +4,11 @@ import sys
 import socket
 import threading
 import requests
+import logging
 import ssl
 import json
 import time
+import asyncio
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -58,8 +60,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
 
-        self.client = False  # Default state (not logged in)
-
         self.config = self.load_config()
         print("Loaded config:", self.config)  # Add this for debugging
         self.ssl_key_path = self.config.get('ssl_key_path')  # Use .get() to avoid KeyError
@@ -90,6 +90,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.collab_server = CollabServer()
         self.collab_client = CollabClient()
         self.username = None
+        self.connection_loop = None
 
         # Add collab menu actions
         self.actionHost.triggered.connect(self.host_session)
@@ -509,60 +510,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error loading config: {e}")
             return {}
 
-    '''
-    def get_public_ip(self):
-        """Fetch public IP address using an external service."""
-        try:
-            response = requests.get('https://api.ipify.org?format=json')
-            response.raise_for_status()  # Raise an exception if the request failed
-            return response.json().get('ip')  # Extract the public IP from the JSON response
-        except requests.RequestException as e:
-            print(f"Error retrieving public IP: {e}")
-            return None
-    '''
-    '''
-    def host_session(self):
-        """Host a collaborative drawing session."""
-        dialog = HostDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.username = dialog.get_username()
-
-            if not self.user_db.user_exists(self.username):
-                self.user_db.add_user(self.username)
-
-            #port = self.user_reg.register_host(self.username)
-            port = 5050
-            print(f"Port used is {port} \n")
-
-            try:
-                # Get the public IP address
-                host_ip = self.get_public_ip()  # Use the method to fetch the public IP
-
-                if host_ip is None:
-                    # If we can't get the public IP, fallback to private IP
-                    print("Using localhost (127.0.0.1) due to error fetching public IP")
-                    host_ip = "127.0.0.1"
-
-                print("IP Address found for hosting is " + host_ip + "\n")
-
-                # Now, create the collab server with the correct host IP
-                self.collab_server = CollabServer(discovery_host=host_ip, server_port=port)
-                print("Created collab server\n")
-                self.setup_ssl_context(self.collab_server)
-                self.scene.change_color(QColor("#FF0000"))
-
-                # Start the collab server with the correct host IP
-                self.collab_server.start(username=self.username)
-                self.collab_server.clientConnected.connect(self._handle_client_connected)
-                self.collab_server.clientDisconnected.connect(self._handle_client_disconnected)
-                QMessageBox.information(self, "Hosting", f"Session started at {host_ip}:{port}")
-
-                # Now, pass collab_server to BoardScene after it's created
-                self.scene.collab_server = self.collab_server
-
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Failed to host session: {e}")
-    '''
     def host_session(self):
         """Host a collaborative drawing session."""
         dialog = HostDialog(self)
@@ -601,8 +548,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 print(f"Error starting server: {e}")
                 QMessageBox.warning(self, "Error", f"Failed to host session: {e}")
 
-
     def join_session(self):
+
         """Join a collaborative drawing session."""
         dialog = JoinDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -613,53 +560,70 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.user_db.add_user(self.username)
 
             try:
-                # Query the discovery server for the host's address and port
-                discovery_host = "localhost"  # Address of the discovery server
-                discovery_port = 9000  # Port for the discovery service
-
-                collab_client = CollabClient(discovery_host, discovery_port)
-                host_address, port = collab_client.lookup_host(host_username)
-
-                if not host_address or not port:
-                    QMessageBox.warning(self, "Error", f"Host {host_username} not found on the discovery server.")
-                    return
-
-                # Initiate connection using WebRTC
+                # Initialize collaboration client
+                discovery_host = "localhost"
+                discovery_port = 9000
                 self.collab_client = CollabClient(discovery_host, discovery_port)
                 self.setup_ssl_context(self.collab_client)
 
-                print(f"Connecting to: {host_address}:{port}")
+                # Create a new event loop for async operations
+                self.connection_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.connection_loop)
 
-                # Add retries for connection
+                # Start async operations
+                self.connection_loop.run_until_complete(self.collab_client.start_async())
+
+                print(f"Connecting to: {host_username}")
+
+                # Connect with retries
                 MAX_RETRIES = 3
-                retry_count = 0
                 success = False
 
-                while retry_count < MAX_RETRIES:
+                for retry_count in range(MAX_RETRIES):
                     try:
-                        if self.collab_client.connect(host_username):
-                            success = True
+                        success = self.connection_loop.run_until_complete(
+                        self.collab_client.connect(host_username))
+                        if success:
                             break
-                    except Exception as e:
-                        print(f"Connection attempt {retry_count + 1} failed: {e}")
-                        retry_count += 1
-                        time.sleep(2)  # Wait before retrying
-
+                    except ConnectionError as ce:
+                        print(f"Connection attempt {retry_count + 1} failed (WebSocket/TURN): {ce}")
+                        if retry_count < MAX_RETRIES - 1:
+                            logging.info("Retrying connection...")
+                            time.sleep(2)
                 if not success:
+                    logging.error("All connection attempts failed.")
                     QMessageBox.warning(self, "Error", "Failed to join session after multiple attempts.")
+                    self.cleanup_connection()
                     return
 
                 # If connection succeeds
-                QMessageBox.information(self, "Connected", f"Joined session at {host_address}:{port}")
-                print(f"Successfully joined session at {host_address}:{port}")
+                QMessageBox.information(self, "Connected", f"Joined session with {host_username}")
+                print(f"Successfully joined session with {host_username}")
 
-                # Pass collab_client to BoardScene after it's created
-                self.scene.collab_client = self.collab_client
+                # Set up the board scene with the collab client
+                self.scene.set_collab_client(self.collab_client)
                 self.scene.change_color(QColor("#00FF00"))  # Guest pen color
 
             except Exception as e:
                 print(f"Error during join session: {e}")
-                QMessageBox.warning(self, "Error", f"Failed to join session: {e}")
+                self.cleanup_connection()
+                QMessageBox.warning(self, "Error", f"Failed to join session: {str(e)}")
+
+    def cleanup_connection(self):
+        """Clean up connection resources."""
+        if self.collab_client:
+            if self.connection_loop and self.connection_loop.is_running():
+                self.connection_loop.run_until_complete(self.collab_client.close())
+            self.collab_client = None
+
+        if self.connection_loop:
+            self.connection_loop.close()
+            self.connection_loop = None
+
+    def closeEvent(self, event):
+        """Handle window close event."""
+        self.cleanup_connection()
+        super().closeEvent(event)
 
     def setup_ssl_context(self, instance):
         """Set up SSL context for secure communication."""
@@ -690,11 +654,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super().closeEvent(event)
 
 def main():
-    # Start the discovery server in a separate thread
-    discovery_thread = threading.Thread(target=start_discovery_server, args=(9000,), daemon=True)
-    discovery_thread.start()
-    print("Discovery server started.")
-
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()

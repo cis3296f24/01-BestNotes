@@ -3,18 +3,48 @@ import socket
 import threading
 import json
 import os
+import uuid
+
+from qasync import QEventLoop,  asyncSlot, QApplication
+from typing import Dict, Any, Optional
+from dataclasses import dataclass, asdict
+from enum import Enum
 import time
+import logging
 import websockets
 import asyncio
+from dataclasses import dataclass, asdict
 import select
 import stun
-from PySide6.QtCore import QObject, Signal, QEventLoop, QCoreApplication
+from PySide6.QtCore import QObject, Signal, QCoreApplication, QTimer
 from WhiteboardApplication.Collab_Functionality.utils import logger
 import stun
 from WhiteboardApplication.Collab_Functionality.turn_server import TURN_SERVER, TURN_PASSWORD, TURN_USERNAME
-from web_rtc_connection import WebRTCConnection
+from web_rtc_connection import WebRTCConnection, RTCSessionDescription, RTCIceCandidate, DataChannel
 
 #install websockets
+logging.basicConfig(
+    level=logging.DEBUG,  # Set to DEBUG to capture all logs
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]  # Logs will be displayed in the console
+)
+
+'''
+       self.webrtc_connection = WebRTCConnection(
+           ice_servers=[{'urls': TURN_SERVER, 'username': TURN_USERNAME, 'credential': TURN_PASSWORD},
+                        {'urls': self.STUN_SERVER}]
+       )
+       '''
+
+TURN_CONFIG = {
+            "urls": TURN_SERVER,
+            "username": TURN_USERNAME,
+            "credential": TURN_PASSWORD
+        }
+
+STUN_CONFIG = {
+        "urls": "stun:stun.l.google.com:19302"
+        }
 
 class CollabServer(QObject):
     clientConnected = Signal(object)  # Signal emitted when a client connects
@@ -37,15 +67,16 @@ class CollabServer(QObject):
         self.ssl_context = None
         self.running = False
         self.server_thread = None
+        self.peer_connections = None
         self.server_socket_lock = threading.Lock()
         self.websocket_clients = {}  # To store websocket connections for each client
         print(f"Initialized CollabServer with discovery_host: {self.discovery_host}")
 
         # Initialize the WebRTC connection with TURN server details
-        self.webrtc_connection = WebRTCConnection(
-            ice_servers=[{'urls': TURN_SERVER, 'username': TURN_USERNAME, 'credential': TURN_PASSWORD},
-                         {'urls': self.STUN_SERVER}]
-        )
+        self.webrtc_connection = WebRTCConnection([
+            TURN_CONFIG,
+            STUN_CONFIG
+        ])
 
     def get_public_ip_and_port(self):
         """Get the public IP and port using a STUN server."""
@@ -103,7 +134,7 @@ class CollabServer(QObject):
                 print(f"Discovery server response (collab_server): {response}")
 
                 # Check if the response starts with 'OK'
-                if response.startswith("OK"):
+                if response.startswith("OK") or response.startswith("ALREADY_REGISTERED"):
                     return True
                 else:
                     print(f"Unexpected response from server (collab_server): {response}")
@@ -113,35 +144,44 @@ class CollabServer(QObject):
             return False
 
     def check_port_in_use(self, port):
-        """Check if a port is in use."""
+        print(f"Checking if port {port} is in use...")
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             try:
                 sock.bind(('0.0.0.0', port))
+                print(f"Port {port} is not in use.")
                 return False
             except socket.error:
+                print(f"Port {port} is already in use.")
                 return True
 
-    async def handle_signaling(self, websocket, path):
-        """Handle WebRTC signaling over WebSocket."""
-        print(f"New WebSocket client connected (collab_server_: {path}")
-        self.websocket_clients[path] = websocket
-
-        try:
-            async for message in websocket:
-                print(f"Received signaling message (collab_server): {message}")
-                # Handle signaling messages like 'offer', 'answer', 'candidate'
-                if message:
-                    for client_path, client_ws in self.websocket_clients.items():
-                        if client_path != path:
-                            await client_ws.send(message)
-        except Exception as e:
-            print(f"Error in signaling (collab_server_: {e}")
-        finally:
-            del self.websocket_clients[path]
-            print(f"Client disconnected (collab_server): {path}")
 
     def start(self, username):
         """Start the CollabServer."""
+        """Start the CollabServer."""
+        self.ssl_key_path, self.ssl_cert_path = self.load_config()
+        if not self.ssl_key_path or not self.ssl_cert_path:
+            print("SSL configuration is missing. Server cannot start.")
+            return
+
+        if not self.register_with_discovery(username):
+            print("Failed to register with discovery server.")
+            return
+
+        # Initialize peer connections dict
+        self.peer_connections = {}
+
+        # Initialize WebRTC
+        self.webrtc_connection = WebRTCConnection([
+            TURN_CONFIG,
+            STUN_CONFIG
+        ])
+        print("WebRTC connection initialized")
+
+        # Start the server
+        loop = asyncio.get_event_loop()
+        loop.create_task(self.start_signaling_server())
+        print(f"Signaling server starting on {self.user_ip}:{self.user_port}")
+        '''
         self.ssl_key_path, self.ssl_cert_path = self.load_config()
         if not self.ssl_key_path or not self.ssl_cert_path:
             print("SSL configuration is missing. Server cannot start. (collab_server)")
@@ -159,53 +199,155 @@ class CollabServer(QObject):
             self.server_port += 1
 
         print("Registered successfully. (collab_server)")
+
+        # Create QApplication instance if it doesn't exist already
+        app = QApplication.instance() or QApplication([])
+
+        # Integrate asyncio loop with Qt event loop
+        loop = asyncio.get_event_loop()
+
+        # Start the server thread to handle socket communication
         self.server_thread = threading.Thread(target=self.run_server)
         self.server_thread.start()
 
-        # Create QApplication instance if it doesn't exist already
-        app = QCoreApplication.instance() or QCoreApplication([])
+        # Use QTimer to schedule asyncio tasks within the Qt event loop
+        def run_async_tasks():
+            loop.run_forever()
 
-        # Run WebSocket server in asyncio loop without using QEventLoop
-        async def start_websocket_server():
-            start_server = await websockets.serve(self.handle_signaling, "localhost", 8765)
-            print("WebSocket server started for WebRTC signaling. (collab_server)")
-            await start_server.wait_closed()  # Keep the server running
+        timer = QTimer()
+        timer.timeout.connect(run_async_tasks)
+        timer.start(50)  # Run every 50ms
 
-        # Create and run asyncio loop in its own thread
-        loop = asyncio.new_event_loop()  # Create a new asyncio event loop
-        threading.Thread(target=self.run_asyncio_loop, args=(loop, start_websocket_server)).start()
+        # Start WebSocket server as an asyncio task
+        loop.create_task(self.run_asyncio_loop())
+        '''
 
-        # Start the Qt application event loop (this doesn't block the asyncio loop)
-        app.exec_()
+    async def run_asyncio_loop(self):
+        """Run the asyncio event loop in the Qt event loop."""
+        logging.info("Starting asyncio loop for WebSocket server...")
+        try:
+            async with websockets.serve(self.handle_signaling, self.user_ip, self.user_port):
+                logging.info(f"WebSocket server started for WebRTC signaling on {self.user_ip}:{self.user_port}")
+                await asyncio.Future()  # Keep the server running
+        except Exception as e:
+            logging.error(f"Error in WebSocket server: {e}")
 
-    def run_asyncio_loop(self, loop, start_websocket_server):
-        """Run the asyncio event loop in a separate thread."""
-        asyncio.set_event_loop(loop)  # Set the event loop in the new thread
-        loop.run_until_complete(start_websocket_server())
+    async def handle_signaling(self, websocket, path):
+        client_id = str(uuid.uuid4())
+        self.peer_connections[client_id] = {
+            'websocket': websocket,
+            'connection': None
+        }
+
+        try:
+            async for message in websocket:
+                data = json.loads(message)
+
+                if data["type"] == "offer":
+                    # Create peer connection for this client
+                    peer_conn = self.webrtc_connection
+                    peer_conn.onicecandidate = lambda c: self._on_ice_candidate(client_id, c)
+                    self.peer_connections[client_id]['connection'] = peer_conn
+
+                    # Set remote description (client's offer)
+                    await peer_conn.set_remote_description(
+                        RTCSessionDescription(type="offer", sdp=data["sdp"])
+                    )
+
+                    # Create and send answer
+                    answer = await peer_conn.create_answer()
+                    await peer_conn.set_local_description(answer)
+                    await websocket.send(json.dumps({
+                        "type": "answer",
+                        "sdp": answer.sdp
+                    }))
+
+                elif data["type"] == "ice-candidate":
+                    if self.peer_connections[client_id]['connection']:
+                        await self.peer_connections[client_id]['connection'].add_ice_candidate(
+                            RTCIceCandidate(**data["candidate"])
+                        )
+
+        except Exception as e:
+            logging.error(f"Error in signaling handler: {e}")
+        finally:
+            if client_id in self.peer_connections:
+                del self.peer_connections[client_id]
+
+    '''
+    async def handle_signaling(self, websocket, path):
+        """Handle WebRTC signaling"""
+        client_id = str(uuid.uuid4())
+        self.peer_connections[client_id] = websocket
+        logging.info(f"Client {client_id} connected to signaling server")
+
+        try:
+            async for message in websocket:
+                data = json.loads(message)
+                logging.debug(f"Received message from {client_id}: {data}")
+
+                message_type = data.get('type')
+                if message_type == 'offer':
+                    await self.broadcast_message(message, exclude=client_id)
+                elif message_type == 'answer':
+                    if 'target' in data:
+                        target_id = data['target']
+                        if target_id in self.peer_connections:
+                            await self.peer_connections[target_id].send(message)
+                elif message_type == 'ice-candidate':
+                    await self.broadcast_message(message, exclude=client_id)
+
+        except Exception as e:
+            logging.error(f"Error in signaling handler: {e}")
+        finally:
+            logging.info(f"Client {client_id} disconnected from signaling server")
+            del self.peer_connections[client_id]
+    '''
+
+    async def broadcast_message(self, message, exclude=None):
+        """Broadcast message to all peers except the sender"""
+        for client_id, websocket in self.peer_connections.items():
+            if client_id != exclude:
+                try:
+                    await websocket.send(json.dumps(message))
+                except Exception as e:
+                    print(f"Error broadcasting to {client_id}: {e}")
+
+    async def start_signaling_server(self):
+        """Start WebSocket signaling server"""
+        try:
+            self.websocket_server = await websockets.serve(
+                self.handle_signaling,
+                '0.0.0.0',  # Listen on all interfaces
+                self.user_port,
+                ping_interval=None  # Disable ping to prevent timeouts
+            )
+            print(f"Signaling server started on port {self.user_port}")
+        except Exception as e:
+            print(f"Failed to start signaling server: {e}")
+            raise
 
     def run_server(self):
-        """Run the server, handle client connections, and manage socket events."""
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind(('0.0.0.0', self.server_port))
-        self.server_socket.listen(5)  # Max clients in the listening queue
-
-        print(f"Server listening on port (collab_server) {self.server_port}")
+        try:
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            print(f"Binding server to {self.user_ip}:{self.user_port}")
+            self.server_socket.bind(('0.0.0.0', self.user_port))
+            print(f"Server bound successfully")
+            self.server_socket.listen(5)
+            print(f"Server listening on {self.user_ip}:{self.user_port}")
+        except socket.error as e:
+            print(f"Socket error during server setup: {e}")
+            return
 
         self.running = True
         while self.running:
             try:
                 client_socket, client_address = self.server_socket.accept()
-                print(f"Client connected (collab_server): {client_address}")
+                print(f"Client connected: {client_address}")
                 self.clients.append(client_socket)
-
-                # Handle the new client in a separate thread
-                client_thread = threading.Thread(target=self.handle_client, args=(client_socket,))
-                client_thread.start()
+                threading.Thread(target=self.handle_client, args=(client_socket,)).start()
             except Exception as e:
-                print(f"Error while accepting client (collab_server): {e}")
-                continue
-
-        self.server_socket.close()
+                print(f"Error accepting client connection: {e}")
 
     def handle_client(self, client_socket):
         """Handle communication with a connected client."""
@@ -214,13 +356,14 @@ class CollabServer(QObject):
                 message = client_socket.recv(1024)
                 if not message:
                     break
-                print(f"Message from client: {message.decode()}")
-                # Handle the received message here, like forwarding to other clients
+                print(f"Message received from client: {message.decode()}")
+                # Handle messages, e.g., send a response
+                client_socket.sendall(b"Message received")
         except Exception as e:
-            print(f"Error with client communication: {e}")
+            print(f"Error handling client communication: {e}")
         finally:
+            self.clients.remove(client_socket)
             client_socket.close()
-            print("Client disconnected.")
 
     def stop(self):
         """Stop the server and close all connections."""
@@ -229,147 +372,272 @@ class CollabServer(QObject):
             self.server_socket.close()
         print("Server stopped.")
 
-# Example usage:
-if __name__ == "__main__":
-    server = CollabServer()
-    server.start(username="Sample_User")
+class CollabClient(QObject):
+    # Qt signals for asynchronous events
+    connection_established = Signal()
+    connection_failed = Signal(str)
+    message_received = Signal(dict)
 
-class CollabClient:
-    def __init__(self, discovery_host="localhost", discovery_port=9000, stun_server="stun:stun.l.google.com:19302", turn_server=TURN_SERVER):
+    def __init__(self, discovery_host="localhost", discovery_port=9000):
+        super().__init__()
         self.discovery_host = discovery_host
         self.discovery_port = discovery_port
-        self.stun_server = stun_server
-        self.turn_server = turn_server
-        self.socket = None
-        self.client_socket = None
-        self.ssl_context = None
-        self.running = False
-        self.peer_connection = None
         self.websocket = None
+        self.peer_connection = None
+        self.data_channel = None
+        self._event_loop = None
+        self._running = False
 
-    def get_public_ip(self):
-        """Use STUN to get the public IP address."""
+        self.webrtc_connection = WebRTCConnection([
+            TURN_CONFIG,
+            STUN_CONFIG
+        ])
+
+    async def start_async(self):
+        """Start the async event loop in the background."""
+        self._running = True
+        self._event_loop = asyncio.get_event_loop()
+
+    async def connect(self, host_username: str) -> bool:
         try:
-            nat_type, external_ip, external_port = stun.get_ip_info(self.stun_server, 3478)
-            if external_ip:
-                print(f"Detected public IP (collab_client): {external_ip}")
-                return external_ip, external_port
-            else:
-                print("Unable to detect public IP using STUN. (collab_client)")
-                return None, None
-        except Exception as e:
-            print(f"STUN error (collab_client): {e}")
-            return None, None
-
-    def connect_to_turn_server(self):
-        """Connect to the TURN server for relay."""
-        """Provide TURN server details for ICE configuration."""
-        try:
-            print(f"Using TURN server {self.turn_server} for relay. (collab_client)")
-            return self.turn_server, 3478  # Default TURN server port
-        except Exception as e:
-            print(f"TURN configuration error (collab_client): {e}")
-            return None, None
-
-    async def connect_to_websocket(self, server_url):
-        """Connect to WebSocket server for WebRTC signaling."""
-        try:
-            self.websocket = await websockets.connect(server_url)
-            print(f"Connected to WebSocket server at {server_url} (collab_client)")
-        except Exception as e:
-            print(f"Error connecting to WebSocket server (collab_client): {e}")
-
-    async def send_message(self, message):
-        """Send a message over WebSocket."""
-        try:
-            await self.websocket.send(json.dumps(message))
-            print(f"Sent message (collab_client): {message}")
-        except Exception as e:
-            print(f"Error sending message (collab_client): {e}")
-
-    def create_peer_connection(self):
-        """Create WebRTC peer connection with STUN and TURN servers."""
-        ice_servers = [
-            {'urls': f"stun:{self.stun_server}"},
-            {
-                'urls': f"turn:{self.turn_server}",
-                'username': TURN_USERNAME,
-                'credential': TURN_PASSWORD,
-            },
-        ]
-        self.peer_connection = WebRTCConnection(ice_servers)
-        print("Created WebRTC PeerConnection. (collab_client)")
-        self.peer_connection.onicecandidate = self.on_ice_candidate
-        self.peer_connection.ondatachannel = self.on_data_channel
-
-    def on_ice_candidate(self, candidate):
-        """Handle new ICE candidates."""
-        if candidate:
-            message = {'type': 'candidate', 'candidate': candidate}
-            print(f"Sending ICE candidate (collab_client): {candidate}")
-            threading.Thread(target=asyncio.run, args=(self.send_message(message),)).start()
-
-    def on_data_channel(self, data_channel):
-        """Handle incoming data channel."""
-        print("Data channel established. (collab_client)")
-        data_channel.onmessage = self.on_message_received
-
-    def on_message_received(self, message):
-        """Handle incoming messages from data channel."""
-        print(f"Received message (collab_client): {message}")
-        # Handle collaboration messages here
-
-    def connect(self, username):
-        """Connect to the host using WebRTC and TURN."""
-        try:
-            # Lookup host info
-            ip, port = self.lookup_host(username)
+            # Look up host
+            ip, port = await self._lookup_host(host_username)
             if not ip or not port:
-                print(f"User {username} not found. (collab_client)")
+                raise ConnectionError(f"Host '{host_username}' not found.")
+
+            # Connect to signaling server first
+            ws_url = f"ws://{ip}:{port}"
+            print(f"Trying to connect to WebSocket server at {ws_url}.")
+            self.websocket = await websockets.connect(ws_url)
+
+            # Initialize peer connection after websocket is established
+            self.peer_connection = self.webrtc_connection
+            self.peer_connection.onicecandidate = self._on_ice_candidate
+            self.peer_connection.ondatachannel = self._on_data_channel
+
+            # Create data channel after peer connection is initialized
+            self.data_channel = self.peer_connection.create_data_channel("drawing")
+            self.data_channel.onopen = self._on_data_channel_open
+            self.data_channel.onmessage = self._on_message
+
+            # Now create and send offer
+            try:
+                offer = await self.peer_connection.create_offer()
+                await self.peer_connection.set_local_description(offer)
+
+                await self.websocket.send(json.dumps({
+                    "type": "offer",
+                    "sdp": offer.sdp
+                }))
+            except Exception as e:
+                print(f"Error creating/sending offer: {e}")
                 return False
 
-            # Connect to WebSocket signaling server
-            signaling_server_url = f"ws://{ip}:{port}/ws"
-            asyncio.run(self.connect_to_websocket(signaling_server_url))
+            # Wait for answer with timeout
+            try:
+                async with asyncio.timeout(10):  # 10 second timeout
+                    async for message in self.websocket:
+                        data = json.loads(message)
+                        if data["type"] == "answer":
+                            await self.peer_connection.set_remote_description(
+                                RTCSessionDescription(type="answer", sdp=data["sdp"])
+                            )
+                            return True
+                        elif data["type"] == "ice-candidate":
+                            await self.peer_connection.add_ice_candidate(
+                                RTCIceCandidate(**data["candidate"])
+                            )
+            except asyncio.TimeoutError:
+                raise ConnectionError("Connection timed out waiting for answer")
 
-            # Create WebRTC connection
-            self.create_peer_connection()
-            print("WebRTC setup initiated. (collab_client)")
-            return True
-        except Exception as e:
-            print(f"Connection error (collab_client): {e}")
             return False
 
-
-    def lookup_host(self, username):
-        """Query discovery server for host details."""
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.connect((self.discovery_host, self.discovery_port))
-                sock.sendall(f"LOOKUP {username}\n".encode())
-                response = sock.recv(1024).decode().strip()
-                if response == "NOT_FOUND":
-                    return None, None
-
-                ip, port = response.split(":")
-                return ip.strip(), int(port.strip())
         except Exception as e:
-            print(f"Lookup failed (collab_client): {e}")
+            logging.error(f"Connection failed: {e}")
+            self.connection_failed.emit(str(e))
+            return False
+
+    async def fallback_to_turn(self):
+        RETRY_LIMIT = 3
+        retry_count = 0
+        while retry_count < RETRY_LIMIT:
+            try:
+                # Set a timeout for the TURN connection setup (e.g., 10 seconds)
+                await asyncio.wait_for(self.setup_turn_connection(TURN_SERVER, TURN_USERNAME, TURN_PASSWORD), timeout=10)
+                break
+            except asyncio.TimeoutError:
+                logging.error(f"TURN connection attempt {retry_count + 1} timed out.")
+                retry_count += 1
+            except Exception as e:
+                retry_count += 1
+                logging.error(f"TURN connection attempt {retry_count} failed: {e}")
+                if retry_count >= RETRY_LIMIT:
+                    raise
+
+    async def setup_turn_connection(self, turn_server_url: str, username: str, password: str):
+        if not self.websocket:
+            logging.error("WebSocket is None. Cannot configure TURN server.")
+            return
+
+        try:
+            turn_config = {
+                "urls": TURN_SERVER,
+                "username": TURN_USERNAME,
+                "credential": TURN_PASSWORD
+            }
+            logging.info("Sending TURN configuration to the signaling server.")
+            if self.websocket:
+                await self.websocket.send(json.dumps({
+                    "type": "turn-server",
+                    "turn_config": turn_config
+                }))
+            else:
+                raise ConnectionError("WebSocket is not available for TURN configuration.")
+
+            # Wait for acknowledgment of TURN configuration with a timeout (e.g., 10 seconds)
+            async for message in asyncio.wait_for(self.websocket, timeout=10):
+                data = json.loads(message)
+                if data.get("type") == "turn-ack":
+                    logging.info("TURN server acknowledged.")
+                    break
+        except asyncio.TimeoutError:
+            logging.error("TURN server acknowledgment timed out.")
+            raise
+        except Exception as e:
+            logging.error(f"Error sending TURN configuration: {e}")
+            raise
+
+
+    async def _lookup_host(self, username: str) -> tuple[Optional[str], Optional[int]]:
+        """Lookup host details from discovery server."""
+        try:
+            reader, writer = await asyncio.open_connection(
+                self.discovery_host,
+                self.discovery_port
+            )
+            writer.write(f"LOOKUP {username}\n".encode())
+            await writer.drain()
+
+            response = (await reader.readline()).decode().strip()
+            writer.close()
+            await writer.wait_closed()
+
+            if response == "NOT_FOUND":
+                return None, None
+
+            ip, port = response.split(":")
+            return ip.strip(), int(port.strip())
+
+        except Exception as e:
+            logger.error(f"Lookup error: {str(e)}")
             return None, None
 
-    def disconnect(self):
-        """Disconnect from WebRTC and WebSocket."""
-        self.running = False
-        if self.websocket:
-            try:
-                asyncio.run(self.websocket.close())
-                print("Closed WebSocket connection. (collab_client)")
-            except Exception as e:
-                print(f"Error closing WebSocket (collab_client): {e}")
+    def _on_ice_candidate(self, candidate: RTCIceCandidate):
+        """Handle new ICE candidates."""
+        if candidate and self.websocket:
+            message = {
+                'type': 'candidate',
+                'candidate': asdict(candidate)
+            }
+            asyncio.create_task(self.websocket.send(json.dumps(message)))
 
-        if self.peer_connection:
+    def _on_data_channel_open(self):
+        """Handle data channel opening"""
+        print("Data channel opened")
+        self.connection_established.emit()
+
+    def _on_data_channel(self, channel: DataChannel):
+        """Handle incoming data channel."""
+        logger.info(f"Data channel received: {channel.label}")
+        if channel.label == "drawing":
+            self.data_channel = channel
+            channel.onmessage = self._on_message
+            channel.onclose = self._on_channel_close
+            self.connection_established.emit()
+
+    def _on_message(self, message: str):
+        """Handle incoming messages."""
+        try:
+            data = json.loads(message)
+            self.message_received.emit(data)
+        except Exception as e:
+            logger.error(f"Message handling error: {str(e)}")
+
+    def _on_channel_close(self):
+        """Handle data channel closure."""
+        logger.info("Data channel closed")
+        self.data_channel = None
+
+    async def send_drawing_data(self, data: Dict[str, Any]):
+        """Send drawing data through the data channel"""
+        if self.data_channel and self.data_channel.readyState == "open":
             try:
-                self.peer_connection.close()
-                print("Closed WebRTC PeerConnection. (collab_client)")
+                await self.data_channel.send(json.dumps(data))
             except Exception as e:
-                print(f"Error closing WebRTC connection (collab_client): {e}")
+                print(f"Error sending drawing data: {e}")
+
+    async def close(self):
+        """Close all connections."""
+        self._running = False
+        if self.peer_connection:
+            self.peer_connection.close()
+        if self.websocket:
+            await self.websocket.close()
+
+    '''
+        async def connect(self, host_username: str) -> bool:
+            """Establish a connection to the host using WebSocket and attempt P2P setup."""
+            try:
+                logging.info(f"Looking up host '{host_username}' in discovery server.")
+                ip, port = await self._lookup_host(host_username)
+                if not ip or not port:
+                    raise ConnectionError(f"Host '{host_username}' not found.")
+
+                ws_url = f"ws://{ip}:{port}"
+                logging.info(f"Attempting to connect to WebSocket server at {ws_url}.")
+
+                # Set a timeout for the WebSocket connection attempt (e.g., 10 seconds)
+                try:
+                    self.websocket = await asyncio.wait_for(websockets.connect(ws_url), timeout=10)
+                    if not self.websocket:
+                        raise ConnectionError("WebSocket connection is None.")
+                    logging.info("WebSocket connection established.")
+                except asyncio.TimeoutError:
+                    logging.error(f"WebSocket connection attempt timed out after 10 seconds.")
+                    await self.fallback_to_turn()
+                    return False
+                except Exception as ws_error:
+                    logging.error(f"WebSocket connection failed: {ws_error}")
+                    self.websocket = None
+                    await self.fallback_to_turn()
+                    return False
+
+                 # Handle incoming WebSocket messages and set up WebRTC connection
+                async for message in self.websocket:
+                    try:
+                        data = json.loads(message)
+                        logging.debug(f"Received WebSocket message: {data}")
+
+                        if data['type'] == 'answer':
+                            logging.info("Received SDP answer. Setting remote description.")
+                            await self.peer_connection.set_remote_description(
+                                RTCSessionDescription(type='answer', sdp=data['sdp'])
+                            )
+                            return True
+                        elif data['type'] == 'ice-candidate':
+                            logging.info("Received ICE candidate. Adding to connection.")
+                            await self.peer_connection.add_ice_candidate(
+                                RTCIceCandidate(**data['candidate'])
+                            )
+                            return True
+
+                    except Exception as e:
+                        logging.error(f"Error processing WebSocket message: {e}")
+                        return False
+            except Exception as e:
+                logging.error(f"Failed to connect: {e}")
+                return False
+
+        '''
+
+
