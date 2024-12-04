@@ -76,12 +76,13 @@ class MediaPlayer(QMainWindow):
 
         # Add actions to file menu
         open_action = QAction("Load Video", self)
-        close_action = QAction("Close App", self)
+        #commented out because it closes the entire Best Notes Application
+        # close_action = QAction("Close App", self)
         file_menu.addAction(open_action)
-        file_menu.addAction(close_action)
+        # file_menu.addAction(close_action)
 
         open_action.triggered.connect(self.open_file)
-        close_action.triggered.connect(sys.exit)
+        # close_action.triggered.connect(sys.exit)
 
         self.timer = QTimer(self)
         self.timer.setInterval(100)
