@@ -212,6 +212,8 @@ class BoardScene(QGraphicsScene):
                 self.selected_text_box = item
                 self.start_pos = event.scenePos()  # Store the start position for dragging
                 self.dragging_text_box = True
+                self.highlighting_enabled = False
+                self.highlighting = False
             elif isinstance(item, ResizablePixmapItem):
                 print("Imaged selected")
                 self.drawing = False
@@ -286,7 +288,8 @@ class BoardScene(QGraphicsScene):
     def mouseMoveEvent(self, event):
         if self.dragging_text_box and self.selected_text_box:
             self.drawing = False
-            # self.highlight_enabled = False
+            self.highlight_enabled = False
+            self.highlighting = False
             print("Dragging box")
             delta = event.scenePos() - self.start_pos
             self.selected_text_box.setPos(self.selected_text_box.pos() + delta)
@@ -297,7 +300,7 @@ class BoardScene(QGraphicsScene):
             self.path.lineTo(curr_position)
             self.pathItem.setPath(self.path)
             self.previous_position = curr_position
-        elif self.active_tool == "highlighter":
+        elif self.highlighting:
             print("highlighting")
             curr_position = event.scenePos()
             self.path_highlighter.lineTo(curr_position)
@@ -320,11 +323,11 @@ class BoardScene(QGraphicsScene):
                 print("Path item added to undo stack:", self.pathItem_highlighter)
             self.drawing = False
             self.highlighting = False
-            # self.highlighting_enabled = False
+            self.highlighting_enabled = False
             self.is_text_box_selected = False
 
         super().mouseReleaseEvent(event)
-    #Marks which tool (pen, eraser) is being used so multiple don't run at once
+    #Marks which tool (pen, eraser, highlighter) is being used so multiple don't run at once
     def set_active_tool(self, tool):
         self.active_tool = tool
 
@@ -556,12 +559,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # Deactivate erasing mode when button is clicked again
                 print("Highlighter deactivated")  # Debugging print
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(None)
+        elif sender_button == self.tb_actionText:
+            if self.tb_actionText.isChecked():
+                # Enable highlighter mode, disable pen & eraser
+                print("Textbox activated")  # Debugging print
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("highlighter")
+                self.tb_actionPen.setChecked(False)  # Ensure pen is not active
+                self.tb_actionCursor.setChecked(False)
+                self.tb_actionEraser.setChecked(False)
 
     #Adds a text box using the method in BoardScene
     def create_text_box(self):
         # Create a text box item and add it to the scene
         text_box_item = TextBox()
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_text_box(text_box_item)
+
 
     ## Was unable to implement this during the duration of the last sprint.
     # def create_shape(self):
