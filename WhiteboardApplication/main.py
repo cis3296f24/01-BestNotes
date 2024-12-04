@@ -388,7 +388,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tb_actionPen.triggered.connect(self.button_clicked)
         self.tb_actionHighlighter.triggered.connect(self.button_clicked)
         self.tb_actionEraser.triggered.connect(self.button_clicked)
-        self.tb_actionColorPen.triggered.connect(self.button_clicked())
+        self.tb_actionColorPen.triggered.connect(self.button_clicked)
 
         #sharon helped me out by showing this below
         self.tb_actionText.triggered.connect(self.create_text_box)
@@ -591,17 +591,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(None)
 
         elif sender_button == self.tb_actionColorPen:
-            if self.tb_actionColorPen.isChecked():
-                # Enable color selector mode, disable eraser and higlighter
-                print("Color selection activated")  # Debugging print
-                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("colorpen")
-                self.tb_actionPen.setChecked(True)  # Ensure pen is active
-                self.tb_actionCursor.setChecked(False)
-                self.tb_actionEraser.setChecked(False)
-            else:
-                # Deactivate erasing mode when button is clicked again
-                print("Color selection deactivated")  # Debugging print
-                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(None)
+            # Enable color selector mode, disable eraser and higlighter
+            print("Color selection activated")  # Debugging print
+            self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("colorpen")
+            self.tb_actionPen.setChecked(True)  # Ensure pen is active
+            self.tb_actionCursor.setChecked(False)
+            self.tb_actionEraser.setChecked(False)
 
         elif sender_button == self.tb_actionText:
             if self.tb_actionText.isChecked():
