@@ -1,8 +1,8 @@
 
 #Tests file for main.py in WhiteboardApplication directory
-#Created by Riviera Sperduto
-#Created 11/20/2024
-#Last edit: 11/20/2024
+#Created by Sharon Dong
+#Created 12/3/2024
+#Last edit: 12/3/2024
 from time import sleep
 
 import pytest
@@ -21,9 +21,7 @@ def test_PenButton(qtbot):
     window.show()
 
     sleep(2)
-    #have to press the button twice for some reason...
-    window.tb_actionPen.trigger()
-    window.tb_actionPen.trigger()
+    window.tb_actionHighlighter.trigger()
 
     canvas = window.tabWidget.currentWidget().findChild(QtWidgets.QGraphicsView, 'gv_Canvas')
     assert canvas is not None, "Canvas is not found"
@@ -47,6 +45,6 @@ def test_PenButton(qtbot):
     # Assert that a new path was added to the scene
     assert len(scene.items()) > 0, "No items were added to the scene"
 
-    # Verify the tool state if needed (e.g., the active tool is 'pen')
-    assert scene.active_tool == "pen", "Pen tool was not activated properly"
+    # Verify the tool state if needed (e.g., the active tool is 'highlighter')
+    assert scene.active_tool == "highlighter", "Highlighter tool was not activated properly"
 
