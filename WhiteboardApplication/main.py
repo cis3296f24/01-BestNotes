@@ -441,9 +441,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if file_name:
             pixmap = QPixmap(file_name)
             if not pixmap.isNull():
-                pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
+                pixmap = pixmap.scaled(500, 500, Qt.AspectRatioMode.KeepAspectRatio)
                 pixmap_item = ResizablePixmapItem(pixmap)
-                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().addItem(pixmap_item)
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_image(pixmap_item)
 
     def open_video_player(self):
         # print("video button clicked")   #debug
