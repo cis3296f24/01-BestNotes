@@ -310,7 +310,7 @@ class BoardScene(QGraphicsScene):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton or event.button() == Qt.RightButton:
             if self.dragging_text_box:
                 print("Finished dragging box")
                 self.dragging_text_box = False
