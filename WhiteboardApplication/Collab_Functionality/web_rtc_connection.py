@@ -79,6 +79,11 @@ class WebRTCConnection:
         self._data_channels: Dict[int, DataChannel] = {}
         self._ice_candidates: List[RTCIceCandidate] = []
 
+    def add_ice_server(self, server: Dict[str, Any]):
+        """Add an ICE server dynamically."""
+        self.ice_servers.append(server)
+        print(f"Added ICE server: {server}")
+
     async def create_offer(self) -> RTCSessionDescription:
         if self.signalingState != RTCSignalingState.STABLE:
             raise RuntimeError("Invalid signaling state to create offer")

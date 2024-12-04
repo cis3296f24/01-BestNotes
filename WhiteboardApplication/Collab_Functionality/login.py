@@ -254,14 +254,15 @@ class LoginWindow(QWidget):
             QMessageBox.information(self, "Registration Success", "User registered successfully!")
 
             # After registration, register user with the discovery server
-            self.register_with_discovery_server(username, ip_address, port)
+            ngrok_url = ""
+            self.register_with_discovery_server(username, ip_address, port, ngrok_url)
 
         except sqlite3.IntegrityError:
             QMessageBox.warning(self, "Error", "Username already exists. (login)")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An unexpected error occurred (login): {e}")
 
-    def register_with_discovery_server(self, username, ip_address, port):
+    def register_with_discovery_server(self, username, ip_address, port, ngrok_url):
         """
         Registers the user with the discovery server, including TURN details.
         """
@@ -278,13 +279,13 @@ class LoginWindow(QWidget):
         try:
             # Store in discovery-specific database
             cursor.execute(
-                "INSERT OR REPLACE INTO discovery_users (username, ip_address, port, turn_info) VALUES (?, ?, ?, ?)",
-                (username, ip_address, port, turn_info))
+                "INSERT OR REPLACE INTO discovery_users (username, ip_address, port, turn_info, ngrok_url) VALUES (?, ?, ?, ?, ?)",
+                (username, ip_address, port, turn_info, ngrok_url))
             conn.commit()
 
             # Optionally, send the registration details to the discovery server
             with socket.create_connection((DISCOVERY_HOST, DISCOVERY_PORT)) as sock:
-                register_message = f"REGISTER {username} {ip_address} {port} {turn_info}\n"
+                register_message = f"REGISTER {username} {ip_address} {port} {turn_info} {ngrok_url}\n"
                 sock.sendall(register_message.encode())
                 response = sock.recv(1024).decode().strip()
                 if response == "OK":

@@ -92,16 +92,6 @@ class BoardScene(QGraphicsScene):
         self.username = username
         print(f"Username set for BoardScene: {username}")
 
-        # Trigger collaboration setup now that username is set
-        #self.setup_collaboration()
-
-    '''
-    def set_collab_client(self, collab_client):
-        print("Collab client set same as main")
-        self.collab_client = collab_client
-
-        self.setup_collaboration()
-    '''
 
     def serialize_action(self, action_type: str, data: Dict[str, Any]) -> str:
         """Convert a drawing action to JSON string."""

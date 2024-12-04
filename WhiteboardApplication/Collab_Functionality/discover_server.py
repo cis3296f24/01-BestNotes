@@ -30,7 +30,6 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
         self.cursor.close()
         self.db_conn.close()
 
-    # Inside the `handle` method
     def handle(self):
         try:
             # Receive the command and arguments
@@ -49,19 +48,20 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
             logging.info(f"Received command: {command} with args: {args} from {self.client_address}")
 
             if command == "REGISTER":
-                if len(args) >= 4:  # We expect at least username, IP, port, and TURN info
+                # Expecting at least 5 arguments (username, IP, port, TURN info, ngrok URL)
+                if len(args) >= 5:
+                    
                     username = args[0]
                     ip = args[1]
                     port = int(args[2])
-                    turn_info = ' '.join(args[3:])  # Combine remaining parts as TURN info
-                    logging.debug(f"Registering user {username} at {ip}:{port} with TURN info: {turn_info}")
-                    if self.lookup_user(username):
-                        logging.warning(f"User {username} is already registered.")
-                        self.request.sendall(b"ALREADY_REGISTERED\n")
-                    else:
-                        self.register_user(username, ip, port, turn_info)
+                    # If there are more than 4 args, the last one is the ngrok URL
+                    ngrok_url = args[-1]
+                    turn_info = ' '.join(args[3:-1])  # Combine all middle parts as TURN info
+                    logging.debug(f"Registering user {username} at {ip}:{port} with TURN info: {turn_info} and ngrok URL: {ngrok_url}")
+                    self.register_user(username, ip, port, turn_info, ngrok_url)
                 else:
                     self.request.sendall(b"ERROR: Invalid REGISTER command format\n")
+
 
             # Handle other commands (LOOKUP, DEREGISTER)
             elif command == "LOOKUP":
@@ -70,8 +70,9 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
                     logging.info(f"Looking up user {username}")
                     result = self.lookup_user(username)
                     if result:
-                        ip, port, _ = result  # Ignore TURN info for simplicity
-                        response = f"{ip}:{port}\n"  # Send only the required data
+                        # result is already a formatted string from lookup_user
+                        response = result  # Simply use the result directly as the response
+                        logging.info(f"Response to be sent by discovery server is {response}")
                         self.request.sendall(response.encode())
                     else:
                         self.request.sendall(b"NOT_FOUND\n")
@@ -94,38 +95,67 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
             logging.exception(f"Error handling request: {e}")
             self.request.sendall(b"ERROR: Internal server error\n")
 
-    def register_user(self, username, ip, port, turn_info):
+    def register_user(self, username, ip, port, turn_info, ngrok_url):
         try:
-            if not username or not ip or not port:
+            if not username or not ip or not port or not ngrok_url:
                 self.request.sendall(b"ERROR: Invalid registration format\n")
                 return
 
-            # Use the provided TURN info
-            print(f"(discover_server) Registering user {username} at {ip}:{port} with TURN info: {turn_info}")
+            logging.debug(
+                f"Registering/updating user {username} at {ip}:{port} with TURN info: {turn_info} and ngrok URL: {ngrok_url}")
 
-            # Register the user in the database (discovery_users.db)
+            # Always update or insert the user's information in the database
             self.cursor.execute(
-                "INSERT OR REPLACE INTO discovery_users (username, ip_address, port, turn_info) VALUES (?, ?, ?, ?)",
-                (username, ip, port, turn_info)
+                "INSERT OR REPLACE INTO discovery_users (username, ip_address, port, turn_info, ngrok_url) VALUES (?, ?, ?, ?, ?)",
+                (username, ip, port, turn_info, ngrok_url)
             )
-            self.db_conn.commit()
 
-            # Send success message
-            self.request.sendall(f"OK | TURN INFO: {turn_info}\n".encode())
+            self.db_conn.commit()
+            logging.debug(f"User {username} registration successful, committed to the database.")
+
+            self.request.sendall(b"OK\n")
         except sqlite3.Error as e:
-            self.request.sendall(b"ERROR: Database error during registration\n")
-            print(f"(discover_server) Database error during registration: {e}")
+            logging.error(f"Database error during registration: {e}")
+            self.request.sendall(b"ERROR: Database error\n")
+        except Exception as e:
+            logging.error(f"Unexpected error during registration: {e}")
+            self.request.sendall(b"ERROR: Unexpected error\n")
 
     def lookup_user(self, username):
-        self.cursor.execute("SELECT ip_address, port FROM discovery_users WHERE username = ?", (username,))
-        user_info = self.cursor.fetchone()
+        try:
+            self.cursor.execute("SELECT ip_address, port, turn_info, ngrok_url FROM discovery_users WHERE username = ?",
+                                (username,))
+            user_info = self.cursor.fetchone()
 
-        if user_info:
-            ip, port = user_info
-            # Append TURN server information to the result
-            turn_info = f"{TURN_SERVER} {TURN_USERNAME} {TURN_PASSWORD}"
-            return ip, port, turn_info
-        return None
+            if user_info:
+                ip, port, turn_info, ngrok_url = user_info  # Unpack all four fields
+                logging.debug(
+                    f"Lookup successful for {username}: {ip}:{port}, TURN info: {turn_info}, Ngrok URL: {ngrok_url}")
+
+                # Now we need to extract TURN server, username, password from turn_info
+                turn_parts = turn_info.split(" ")
+                if len(turn_parts) < 3:
+                    logging.error(f"Invalid TURN server credentials: {turn_info}")
+                    return None
+
+                turn_server = turn_parts[0].split(":")[1]  # e.g., '18.116.1.76'
+                turn_port = turn_parts[0].split(":")[2]  # e.g., '3478'
+                turn_username = turn_parts[1]  # e.g., 'public-user'
+                turn_password = turn_parts[2]  # e.g., 'public-password'
+
+                logging.debug(
+                    f"TURN Server: {turn_server}:{turn_port}, TURN Username: {turn_username}, TURN Password: {turn_password}")
+
+                # Format the response with commas separating the different components
+                response = f"{ip}:{port},{turn_server}:{turn_port} {turn_username} {turn_password},{ngrok_url}\n"
+                logging.info(f"Response to be sent by discovery server is {response}")
+                return response
+            else:
+                logging.debug(f"Lookup failed for {username}: User not found")
+                return None
+        except sqlite3.Error as e:
+            logging.error(f"Database error during lookup for {username}: {e}")
+            return None
 
     def deregister_user(self, username):
         # Change 'user_registry' to 'users'
@@ -133,18 +163,19 @@ class DiscoveryHandler(socketserver.BaseRequestHandler):
         self.db_conn.commit()
         return self.cursor.rowcount > 0
 
-#Sets up the database for the discovery server
+# Set up the database for the discovery server
 def init_discovery_database():
     conn = sqlite3.connect("discovery_users.db")
     cursor = conn.cursor()
 
-    # Creates table for discovery registration if it doesn't already exist
+    # Create table for discovery registration if it doesn't already exist
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS discovery_users (
         username TEXT PRIMARY KEY,
         ip_address TEXT,
         port INTEGER,
-        turn_info TEXT)""")
+        turn_info TEXT,
+        ngrok_url TEXT)""")
 
     conn.commit()
     return conn

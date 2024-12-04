@@ -534,6 +534,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.setup_ssl_context(self.collab_server)
                 self.scene.change_color(QColor("#FF0000"))  # Host pen color
 
+                # Start ngrok tunnel to expose server
+                self.collab_server.start_ngrok_tunnel(self.collab_server.user_port)
+
                 # Start the collab server with the correct host IP
                 self.collab_server.start(username=self.username)
                 self.collab_server.clientConnected.connect(self._handle_client_connected)
@@ -582,7 +585,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 for retry_count in range(MAX_RETRIES):
                     try:
                         success = self.connection_loop.run_until_complete(
-                        self.collab_client.connect(host_username))
+                            self.collab_client.connect(host_username))
                         if success:
                             break
                     except ConnectionError as ce:
