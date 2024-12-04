@@ -54,6 +54,14 @@ class BoardScene(QGraphicsScene):
         self.previous_position = None
         self.drawing = False
         self.color = QColor("#000000")
+        black = QColor("#000000")
+        red = QColor("#FF0000")  # Red
+        orange = QColor("#FF7F00")  # Orange
+        yellow = QColor("#FFFF00")  # Yellow
+        green = QColor("#00FF00")  # Green
+        blue = QColor("#0000FF")  # Blue
+        indigo = QColor("#4B0082")  # Indigo
+        violet = QColor("#8A2BE2")  # Violet
         self.size = 1
         self.pathItem = None
 
@@ -61,7 +69,7 @@ class BoardScene(QGraphicsScene):
         self.path_highlighter = None
         self.previous_position_highlighter = None
         self.highlighting= False
-        self.color_highlighter = QColor(255, 255, 0, 30)
+        self.color_highlighter = QColor(255, 255, 0, 70)
         self.size_highlighter = 10
         self.pathItem_highlighter = None
 
@@ -78,8 +86,10 @@ class BoardScene(QGraphicsScene):
         self.highlight_items = []
         self.i = 1
         self.j = 1
+        self.colorCount = 1
         self.highlight_radius_options = [10, 25, 35, 50]
         self.pen_radius_options = [1,5,10,20]
+        self.pen_color_options = [black, red,orange,yellow, green, blue, indigo, violet]
 
     #Adds an action to the undo list (or a list of items in the case of textbox), by treating every action as a list
     def add_item_to_undo(self, item):
@@ -167,9 +177,6 @@ class BoardScene(QGraphicsScene):
             self.drawing_enabled = False
             self.erasing_enabled = False
 
-    def penColor(self, enable):
-        self.change_color()
-
     #A basic eraser, created as a hold so text box function could be implemented
     def erase(self, position):
         eraser_radius = 10
@@ -254,9 +261,6 @@ class BoardScene(QGraphicsScene):
                 elif self.active_tool == "cursor":
                     print("Cursor active")
                     self.drawing = False
-                elif self.active_tool == "colorpen":
-                    print("Change color active")
-                    self.drawing = True
         elif event.button() == Qt.RightButton:
             if self.active_tool == "highlighter":
                 self.highlighting = True
@@ -280,6 +284,7 @@ class BoardScene(QGraphicsScene):
                 self.path.moveTo(self.previous_position)
                 self.pathItem = QGraphicsPathItem()
                 self.size = self.pen_radius_options[self.j]
+                self.color = self.pen_color_options[self.colorCount]
                 my_pen = QPen(self.color, self.size)
                 my_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 self.pathItem.setPen(my_pen)
@@ -452,6 +457,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 pixmap_item = ResizablePixmapItem(pixmap)
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_image(pixmap_item)
 
+    def open_color_menu(self):
+        # Open the color menu when the color pen button is clicked
+        print("test print color")
+
+    def set_color(self, color):
+        # Set the current color to the selected color
+        print("test print color 2 ")
+        self.current_color = color
+        print(f"Color set to {color.name()}")
+        # You can add additional logic here for changing the drawing tool's color, etc.
+
     def open_video_player(self):
         # print("video button clicked")   #debug
         #create the player from board scene
@@ -492,6 +508,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     #adding back in eraser menu functions - RS
     def eraseObject_action(self):
+        print("Erase Object action")
+        print("Eraser activated")  # Debugging print
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("eraser")
+        self.tb_actionPen.setChecked(False)  # Ensure pen is not active
+        self.tb_actionCursor.setChecked(False)
+
+    def colorObject_action(self):
         print("Erase Object action")
         print("Eraser activated")  # Debugging print
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("eraser")

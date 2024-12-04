@@ -248,7 +248,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         ############################################################################################################
         # Ensure all buttons behave properly when clicked
-        self.list_of_buttons = [self.pb_Pen, self.pb_Eraser, self.pb_Highlighter]
+        self.list_of_buttons = [self.pb_Pen, self.pb_Eraser, self.pb_Highlighter, self.pb_colorPen]
 
         self.pb_Pen.setChecked(True)
         self.pb_Pen.clicked.connect(self.button_clicked)

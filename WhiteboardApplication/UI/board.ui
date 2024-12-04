@@ -1026,7 +1026,7 @@ color: rgb(255, 255, 255);</string>
   </action>
   <action name="toolbar_actioncolorPen">
    <property name="checkable">
-    <bool>false</bool>
+    <bool>true</bool>
    </property>
    <property name="icon">
     <iconset resource="../../Icons/Icons.qrc">
@@ -1054,7 +1054,7 @@ color: rgb(255, 255, 255);</string>
    </property>
    <property name="icon">
     <iconset resource="../../Icons/Icons.qrc">
-     <normaloff>:/Tools/colorPen.png</normaloff>:/Tools/colorPen.png</iconset>
+     <normaloff>:/Tools/highlighter.png</normaloff>:/Tools/highlighter.png</iconset>
    </property>
    <property name="text">
     <string>Highlighter</string>
