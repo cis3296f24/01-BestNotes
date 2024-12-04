@@ -214,6 +214,13 @@ class BoardScene(QGraphicsScene):
                 self.dragging_text_box = True
                 self.highlighting_enabled = False
                 self.highlighting = False
+            elif isinstance(item, ResizablePixmapItem):
+                print("Imaged selected")
+                self.drawing = False
+                #self.is_image_box_selected = True
+                #self.selected_image_box = item
+                #self.start_pos = event.scenePos()
+                #self.dragging_image_box = True
             else:
                 if self.active_tool == "pen":
                     print("Pen tool active")
@@ -303,7 +310,7 @@ class BoardScene(QGraphicsScene):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton or event.button() == Qt.RightButton:
             if self.dragging_text_box:
                 print("Finished dragging box")
                 self.dragging_text_box = False
@@ -434,9 +441,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if file_name:
             pixmap = QPixmap(file_name)
             if not pixmap.isNull():
-                pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
+                pixmap = pixmap.scaled(500, 500, Qt.AspectRatioMode.KeepAspectRatio)
                 pixmap_item = ResizablePixmapItem(pixmap)
-                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().addItem(pixmap_item)
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_image(pixmap_item)
 
     def open_video_player(self):
         # print("video button clicked")   #debug
