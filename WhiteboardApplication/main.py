@@ -78,7 +78,7 @@ class BoardScene(QGraphicsScene):
         self.highlight_items = []
         self.i = 1
         self.j = 1
-        self.highlight_radius_options = [10, 20, 30, 40]
+        self.highlight_radius_options = [10, 25, 35, 50]
         self.pen_radius_options = [1,5,10,20]
 
     #Adds an action to the undo list (or a list of items in the case of textbox), by treating every action as a list
@@ -167,6 +167,9 @@ class BoardScene(QGraphicsScene):
             self.drawing_enabled = False
             self.erasing_enabled = False
 
+    def penColor(self, enable):
+        self.change_color()
+
     #A basic eraser, created as a hold so text box function could be implemented
     def erase(self, position):
         eraser_radius = 10
@@ -251,6 +254,9 @@ class BoardScene(QGraphicsScene):
                 elif self.active_tool == "cursor":
                     print("Cursor active")
                     self.drawing = False
+                elif self.active_tool == "colorpen":
+                    print("Change color active")
+                    self.drawing = True
         elif event.button() == Qt.RightButton:
             if self.active_tool == "highlighter":
                 self.highlighting = True
@@ -371,12 +377,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         ############################################################################################################
         # Ensure all buttons behave properly when clicked
-        self.list_of_buttons = [self.tb_actionCursor, self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser]
+        self.list_of_buttons = [self.tb_actionCursor, self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser, self.tb_actionColorPen]
 
         self.tb_actionCursor.triggered.connect(self.button_clicked)
         self.tb_actionPen.triggered.connect(self.button_clicked)
         self.tb_actionHighlighter.triggered.connect(self.button_clicked)
         self.tb_actionEraser.triggered.connect(self.button_clicked)
+        self.tb_actionColorPen.triggered.connect(self.button_clicked())
 
         #sharon helped me out by showing this below
         self.tb_actionText.triggered.connect(self.create_text_box)
@@ -559,6 +566,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # Deactivate erasing mode when button is clicked again
                 print("Highlighter deactivated")  # Debugging print
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(None)
+
+        elif sender_button == self.tb_actionColorPen:
+            if self.tb_actionColorPen.isChecked():
+                # Enable color selector mode, disable eraser and higlighter
+                print("Color selection activated")  # Debugging print
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("colorpen")
+                self.tb_actionPen.setChecked(True)  # Ensure pen is active
+                self.tb_actionCursor.setChecked(False)
+                self.tb_actionEraser.setChecked(False)
+            else:
+                # Deactivate erasing mode when button is clicked again
+                print("Color selection deactivated")  # Debugging print
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(None)
+
         elif sender_button == self.tb_actionText:
             if self.tb_actionText.isChecked():
                 # Enable highlighter mode, disable pen & eraser
