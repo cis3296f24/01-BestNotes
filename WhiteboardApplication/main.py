@@ -61,7 +61,7 @@ class BoardScene(QGraphicsScene):
         self.path_highlighter = None
         self.previous_position_highlighter = None
         self.highlighting= False
-        self.color_highlighter = QColor(255, 255, 0, 10)
+        self.color_highlighter = QColor(255, 255, 0, 30)
         self.size_highlighter = 10
         self.pathItem_highlighter = None
 
@@ -80,7 +80,6 @@ class BoardScene(QGraphicsScene):
         self.j = 1
         self.highlight_radius_options = [10, 20, 30, 40]
         self.pen_radius_options = [1,5,10,20]
-        self.highlight_radius = 10
 
     #Adds an action to the undo list (or a list of items in the case of textbox), by treating every action as a list
     def add_item_to_undo(self, item):
@@ -183,7 +182,6 @@ class BoardScene(QGraphicsScene):
             elif isinstance(item, QGraphicsPathItem):
                 self.removeItem(item)
 
-#Pineapple
     # def highlight(self, position):
     #     highlight_color = QColor(255, 255, 0, 10)
     #     highlight_brush = QBrush(highlight_color)
@@ -422,6 +420,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.tb_actionPen.setChecked(True)
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+
+        ## closes the tab/notebook when clicking the close button
+        self.tabWidget.tabCloseRequested.connect(self.tabWidget.removeTab)
 
     #Upload Image
     def upload_image(self):
@@ -786,6 +787,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.scene = BoardScene()
         NewNotebook.get_canvas(NewNotebook).setScene(self.scene)
         NewNotebook.get_canvas(NewNotebook).setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
 
 
 if __name__ == '__main__':
