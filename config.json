@@ -1,18 +1,4 @@
 {
   "ssl_key_path": "ssl/server.key",
-  "ssl_cert_path": "ssl/server.crt",
-  "FIREBASE_API_WEB_KEY": "AIzaSyDf37VIp22CdbS-QfIO8gnVVfTsF-3t_5U",
-  "FIREBASE_CREDENTIALS_JSON": {
-    "type": "service_account",
-    "project_id": "bestnotes-3e99f",
-    "private_key_id": "1c9af75187b858c2ffcbcb4203748579185c3694",
-    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCqDyebPTSDigeS\nSgTOlSCqtJw9kuC4zpDIasnvbVj6b2Xh3G5aZ7Ysdpm681MzsbCp9XLJ5Yis38/1\nqKE+LCkCXM3hc0sEJIYicKDVpL3bjlFx2qglTZqB5JSfDq73Q3sXRSVP8AbAor3H\nWvOX4Hl9Pm3i5BUAz/VBsl+STzgR3EPdNwD+qQEHVNwVe+aAlWQgKUOeM6SPhZw3\nEbLk44MQ3Dy6anntssxZWwJ+zwM59+OSUkdK2gPnf5SNIS5GaK1RecxBIrLd+8dW\n3+UxwP0XIfnHz5RRyhkaahvl4IYX9mouXWS7xc8IYaqQkjie8f/wk6rheJ4QbzLT\nqCVdhkg9AgMBAAECggEARJMF2pCMq3ouYWwdkhwKZyubUSz4Fy2crmR5d2W1mo7v\nG2uiyCvIBxfwF7Xk2BSP84j5N7aqLWO23Q2Zr5NpGf3IO2AdYNdFi3+1K1FaCb3S\n08FjSl+HrVc6IwVtwmFgslp8mEZmwqkdM9VWIukutDVHZFWqroAtGsfNyBbPuktZ\nC9Wpjjh/LW+dZ9SPoXUkbi0vgh55t46SoUhTkrnULPqiFYFJMTIoj4t2VjkWmCJj\nyJmXCIYmi+S7u5X5PAoUOuyKamTUm2Dkxr5fY5chK3I/zsu+CjgV53ulT8SkWfyL\nP/6E+mQ/RFUfyDQmBgZX8fth3B7TC0ZnoY1EVFlVtQKBgQDt8RWAtnzbnCnE5FPQ\nkkpL3lzwnYwQRSZThCEQNCPcJ7iGUjGp1WzbWOQxCHvnNCpDM5JuB25ScsfAS3Hv\nUKTTG0I6M54fTon25CmTEHEWV2hkgyYfZSjWqRo8/VK3jPscvz+HXKnwXGfMEeQw\nPHv22W1JzWKCTYbZ0J18D10u6wKBgQC29zJBhUSrgfHSfK/a5c9Gm0WFqbaf9o6T\nDHBtuxI3PXecj4nCyjEsubWoyg41CFJv1ok3msRjIrbiJ4hG0OwPjvPprERe3FXs\nd3Kd3SsVSiifmBxT1+h3yyAHQELT6cLJLlnnyTWGQxSsD5HjvxhLSeWzQjWjY5Ko\nJ9WHafwrdwKBgG9frUT2JjNVQWfbyC+UihpBFxe5Ztomw+3Lpv5CqZZfMUwOJRjt\nwWpajVU2N2jdTfrupNfDuqv09fLYXZg7EyuNUs6TYqwcww9BdQRVadmfSEnj6XBA\nlYEE3jc2DAXGg7PNARuHEDRlzGAE7950MUI2O6WT8Uw0pa5Gq7BqMJ/JAoGAETeL\ntBytTJJKxirThX6wlY1Q6nYA6GaUHgRCpCDBYw9WrRXYucq6++Fx1bNFyPnCgCGp\nAeF/b3C50ugza66HOCOUkj2SpXaIY1sOHwrL3hH/Zp0ytTUQ/AzSM7x5TWWm3bWN\n4kDN15eCX3qLmOnHiHYotkiZsYlSKJ6u+jIf95sCgYEAp6M0SdVHaTv/RQqYPTIF\nVMyM9ugkuBIIDpirWkPu6hX+nOJue0m6O9GuPm2jzoceWr1l+QFXk/CyHe3+ogdv\n4+GTI5P2E3AYURmwzLt2I8cPqoaOlx3XRgbXmAGjNt6pBKzrzkYMah6a6MyQAqmw\n7pxtlyfc1M20gHBySRZOEHg=\n-----END PRIVATE KEY-----\n",
-    "client_email": "firebase-adminsdk-qo2on@bestnotes-3e99f.iam.gserviceaccount.com",
-    "client_id": "117801956614813087621",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-qo2on%40bestnotes-3e99f.iam.gserviceaccount.com",
-    "universe_domain": "googleapis.com"
-  }
+  "ssl_cert_path": "ssl/server.crt"
 }
