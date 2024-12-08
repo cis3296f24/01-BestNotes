@@ -45,7 +45,6 @@ import json
 from WhiteboardApplication.UI.board import Ui_MainWindow
 from WhiteboardApplication.text_box import TextBox
 from WhiteboardApplication.new_notebook import NewNotebook
-from WhiteboardApplication.Collab_Functionality.host_window import HostWindow
 from WhiteboardApplication.board_scene import BoardScene
 from WhiteboardApplication.database import UserDatabase
 from WhiteboardApplication.collab_dialogs import HostDialog, JoinDialog, UserRegistry
@@ -122,14 +121,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.redo_list = []
 
         self.new_tab()
-
-    def open_host_window(self):
-        """ Opens the host window only after login """
-        if self.client:  # Check if the user is logged in
-            self.host_window = HostWindow()
-            self.host_window.exec()  # Show the host window
-        else:
-            QMessageBox.warning(self, "Login Required", "Please log in first to host a session.")
 
     #Upload Image
     def upload_image(self):
