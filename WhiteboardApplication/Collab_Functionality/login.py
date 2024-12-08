@@ -13,21 +13,23 @@ from PySide6.QtGui import QPainter, QColor, QFont, QLinearGradient
 from WhiteboardApplication.main2 import MainWindow
 from WhiteboardApplication.board_scene import BoardScene
 
+
+with open('../../config.json', 'r') as f:
+    config = json.load(f)
+
 # Get Firebase credentials from environment variable
-firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
-
-# Write the credentials to a temporary file
-with open('firebase-credentials.json', 'w') as f:
-    f.write(firebase_credentials_json)
-
+firebase_credentials_json = config.get('FIREBASE_CREDENTIALS_JSON')
+firebase_api_key = config.get('FIREBASE_API_WEB_KEY')
 # Initialize Firebase app using the credentials
-cred = credentials.Certificate('firebase-credentials.json')
+cred = credentials.Certificate(firebase_credentials_json)
 firebase_app = initialize_app(cred, {
     'databaseURL': 'https://bestnotes-3e99f-default-rtdb.firebaseio.com/'
 })
 
 ref = db.reference('/users')
 print(ref.get())
+print("Made it here\n")
+print(f"Contents are: {firebase_api_key}\n")
 
 # Encrypts password with bcrypt
 def encrypt_password(password):
@@ -106,10 +108,10 @@ class LoginWindow(QWidget):
         email = self.email_input.text()
         password = self.password_input.text()
 
-        FIREBASE_API_KEY = os.getenv('FIREBASE_API_KEY')
+        print("Made it to url")
         # Firebase API URL with the web API key
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
-
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}"
+        print(f"Url says: {url}")
         # Prepare the login request body
         payload = {
             "email": email,
@@ -203,3 +205,4 @@ def main():
 # Optional: make this the default entry point if running as a script
 if __name__ == "__main__":
     main()
+
