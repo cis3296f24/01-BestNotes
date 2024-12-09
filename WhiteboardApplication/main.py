@@ -762,7 +762,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return transform
 
     def deserialize_text_item(self, data):
-        from text_box import TextBox
         text_item = TextBox()
         text_item.setFont(self.deserialize_font(data['font']))
         text_item.setDefaultTextColor(self.deserialize_color(data['color']))
