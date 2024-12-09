@@ -1,9 +1,10 @@
 import os
 import pickle
 import sys
-import socket
-import threading
-import time
+import random
+from firebase_admin import db
+from threading import Thread
+from WhiteboardApplication.board_sync import WhiteboardSync
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -21,7 +22,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QFileDialog,
     QGraphicsPixmapItem, QWidget, QTabWidget, QAbstractScrollArea, QSizePolicy, QGraphicsView, QHBoxLayout, QGridLayout,
-    QScrollArea, QMessageBox, QDialog
+    QScrollArea, QMessageBox, QDialog, QMenu, QInputDialog
 )
 
 from PySide6.QtGui import (
@@ -32,24 +33,19 @@ from PySide6.QtGui import (
     QColor,
     QBrush,
     QAction,
-    QTransform, QBrush, QFont, QPixmap, QImageReader, QCursor
+    QTransform, QBrush, QFont, QPixmap, QImageReader, QCursor, QDesktopServices
 )
 
 from PySide6.QtCore import (
-    Qt, QRectF, QSizeF, QPointF, QSize, QRect, QFile, QIODevice
+    Qt, QRectF, QSizeF, QPointF, QSize, QRect, QFile, QIODevice, QUrl, QTimer
 )
-
-import ssl
-import json
 
 from WhiteboardApplication.UI.board import Ui_MainWindow
 from WhiteboardApplication.text_box import TextBox
 from WhiteboardApplication.new_notebook import NewNotebook
 from WhiteboardApplication.board_scene import BoardScene
-from WhiteboardApplication.database import UserDatabase
-from WhiteboardApplication.collab_dialogs import HostDialog, JoinDialog, UserRegistry
-from WhiteboardApplication.Collab_Functionality.collab_manager import CollabServer, CollabClient
-from WhiteboardApplication.Collab_Functionality.discover_server import start_discovery_server
+
+from WhiteboardApplication.resize_handle_image import ResizablePixmapItem
 
 class MainWindow(QMainWindow, Ui_MainWindow):
 
@@ -57,17 +53,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
 
-        self.client = False  # Default state (not logged in)
+        self.user_email = None
 
-        self.config = self.load_config()
-        print("Loaded config:", self.config)  # Add this for debugging
-        self.ssl_key_path = self.config.get('ssl_key_path')  # Use .get() to avoid KeyError
-        self.ssl_cert_path = self.config.get('ssl_cert_path')  # Same here
-
-        if not self.ssl_key_path or not self.ssl_cert_path:
-            print("Warning: SSL key or certificate path is missing.")
-
-        if hasattr(self, 'actionImages'):
+        if hasattr(self, 'tb_actionImages'):
             print("actionImages is initialized.")
         else:
             print("actionImages is NOT initialized.")
@@ -76,24 +64,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionSave.triggered.connect(self.save)
         self.actionLoad.triggered.connect(self.load)
         self.actionNew.triggered.connect(self.new_tab)
-
-        #Menu Bar: Hosting and Joining
-        # Add collab-related members
-        self.user_db = UserDatabase()
-        self.user_reg = UserRegistry()
-        self.collab_server = None
-        self.collab_client = None
-        self.username = None
-
-        # Add collab menu actions
-        self.actionHost.triggered.connect(self.host_session)
-        self.actionJoin.triggered.connect(self.join_session)
+        self.actionDocument.triggered.connect(self.display_help_doc)
+        self.actionClose.triggered.connect(sys.exit)
 
         ############################################################################################################
         # Ensure all buttons behave properly when clicked
-        self.list_of_buttons = [self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser]
+        self.list_of_buttons = [self.tb_actionCursor, self.tb_actionPen, self.tb_actionHighlighter, self.tb_actionEraser]
 
-        self.tb_actionPen.setChecked(True)
+        self.tb_actionCursor.triggered.connect(self.button_clicked)
         self.tb_actionPen.triggered.connect(self.button_clicked)
         self.tb_actionHighlighter.triggered.connect(self.button_clicked)
         self.tb_actionEraser.triggered.connect(self.button_clicked)
@@ -103,6 +81,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tb_actionEraser.triggered.connect(self.button_clicked)
         self.tb_actionPen.triggered.connect(self.button_clicked)
 
+
+        self.tb_actionVideos.triggered.connect(self.open_video_player)
+
+        #fixing the eraser shit I messed up - RS
+        menu = QMenu()
+        menu.addAction("Erase Object", self.eraseObject_action)
+        menu.addAction("Pen Eraser", self.penEraser_action)
+        self.tb_actionEraser.setMenu(menu)
+
+        self.eraser_color = QColor("#F3F3F3")
         self.current_color = QColor("#000000")
 
         ############################################################################################################
@@ -115,12 +103,123 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tb_actionUndo.triggered.connect(self.undo)
         self.tb_actionRedo.triggered.connect(self.redo)
 
+        self.actionHost.triggered.connect(self.host_meeting)
+        self.actionJoin.triggered.connect(self.join_meeting)
+
         # Image
         self.tb_actionImages.triggered.connect(self.upload_image)
-
+        ###########################################################################################################
         self.redo_list = []
 
         self.new_tab()
+
+        self.tb_actionPen.setChecked(True)
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+
+        ## closes the tab/notebook when clicking the close button
+        self.tabWidget.tabCloseRequested.connect(self.tabWidget.removeTab)
+
+    def set_user_email(self, email):
+        self.user_email = email
+        print(f"Username set in MainWindow: {self.user_email}")
+
+    def generate_meeting_id(self):
+        """Generate a random numeric meeting ID."""
+        return str(random.randint(100000, 999999))  # Example: 6-digit numeric ID
+
+    def host_meeting(self):
+        # Generate a random meeting ID
+        meeting_id = self.generate_meeting_id()
+
+        # Inform the user about the meeting ID
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("Meeting Created")
+        msg.setText(f"Your meeting ID is: {meeting_id}")
+        msg.exec()
+
+        # Create the meeting in the database
+        meeting_ref = db.reference(f"meetings/{meeting_id}")
+        meeting_ref.set({
+            "participants": {
+                "Host": {
+                    "name": self.user_email
+                }
+            }
+        })
+
+        # Start listening for participant updates
+        self.notify_participants(meeting_id)
+
+        print(f"Meeting {meeting_id} created successfully.")
+        current_scene = self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene()
+        current_scene.sync = WhiteboardSync(current_scene, meeting_id, self.user_email)
+
+    def join_meeting(self, user_id):
+        # Prompt the user for the meeting ID
+        meeting_id, ok = QInputDialog.getText(None, "Join Meeting", "Enter Meeting ID:")
+        if not ok or not meeting_id.strip():
+            return  # User canceled or entered invalid input
+
+        meeting_id = meeting_id.strip()
+
+        # Join the meeting in the database
+        meeting_ref = db.reference(f"meetings/{meeting_id}/participants")
+        meeting_ref.update({
+            "Guest": {
+                "name": self.user_email
+            }
+        })
+
+        # Confirm to the user
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("Meeting Joined")
+        msg.setText(f"You have joined meeting {meeting_id}.")
+        msg.exec()
+
+        # Start listening for participant updates
+        self.notify_participants(meeting_id)
+
+        print(f"User {self.user_email} joined meeting {meeting_id}.")
+        current_scene = self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene()
+        current_scene.sync = WhiteboardSync(current_scene, meeting_id, self.user_email)
+
+    def notify_participants(self, meeting_id):
+        """Set up a listener to notify participants when someone joins."""
+        meeting_ref = db.reference(f"meetings/{meeting_id}/participants")
+
+        def participant_added(event):
+            # Check for 'put' or 'patch' events which indicate an update to the participants
+            if event.event_type in ["put", "patch"] and event.data:
+                # Loop through the participants and check if any new participant has joined
+                for user_id, participant_data in event.data.items():
+                    user_name = participant_data.get("name", "Unknown")  # Get the participant's name
+                    print(f"User added is named: {user_name}")
+            else:
+                print(f"Event type is {event.event_type}\n Event data is: {event.data}")
+
+        def start_listener():
+            try:
+                print("Trying to start listener")
+                meeting_ref.listen(participant_added)
+            except Exception as e:
+                print(f"Error in listener: {e}")
+
+        listener_thread = Thread(target=start_listener)
+        listener_thread.daemon = True  # This ensures the thread will exit when the main program exits
+        listener_thread.start()
+
+    def show_notification(self, user_name, meeting_id):
+        """Display a QMessageBox notification for a new participant."""
+        # Create the message box
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("New Participant")
+        msg.setText(f"{user_name} has joined Meeting ID: {meeting_id}.")
+
+        # Ensure the message box is shown on the main thread
+        QTimer.singleShot(0, msg.exec)  # This schedules the execution on the main thread
 
     #Upload Image
     def upload_image(self):
@@ -129,11 +228,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if file_name:
             pixmap = QPixmap(file_name)
             if not pixmap.isNull():
-                pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
-                pixmap_item = QGraphicsPixmapItem(pixmap)
-                pixmap_item.setPos(0, 0)  # Adjust position as needed
-                pixmap_item.setFlag(QGraphicsPixmapItem.ItemIsMovable)
+                pixmap = pixmap.scaled(500, 500, Qt.AspectRatioMode.KeepAspectRatio)
+                pixmap_item = ResizablePixmapItem(pixmap)
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().add_image(pixmap_item)
+
+    def open_video_player(self):
+        # print("video button clicked")   #debug
+        #create the player from board scene
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().open_video_player()
 
     # this finds the current tab and locates the canvas
     # inside that tab to access its scene
@@ -146,8 +248,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def clear_canvas(self):
         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().clear()
 
-    #Depending on which button is clicked, sets the appropriate flag so that operations
-    #don't overlap
+    def color_changed(self, color):
+         self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().change_color(color)
+
+    #adding back in eraser menu functions - RS
+    def eraseObject_action(self):
+        print("Erase Object action")
+        print("Eraser activated")  # Debugging print
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("eraser")
+        self.tb_actionPen.setChecked(False)  # Ensure pen is not active
+        self.tb_actionCursor.setChecked(False)
+
+
+    def penEraser_action(self):
+        print("Pen Eraser action")
+            # Enable pen mode, disable eraser
+        print("Pen activated")  # Debugging print
+        self.color_changed(self.eraser_color)
+        self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+        self.tb_actionEraser.setChecked(False)  # Ensure eraser is not active
+        self.tb_actionCursor.setChecked(False)
+
+    # Depending on which button is clicked, sets the appropriate flag so that operations
+    # don't overlap
     def button_clicked(self):
         sender_button = self.sender()
 
@@ -166,7 +289,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.tb_actionPen.isChecked():
                 # Enable pen mode, disable eraser
                 print("Pen activated")  # Debugging print
+                # self.color_changed(self.current_color)
                 self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("pen")
+                self.color_changed(self.current_color)
                 self.tb_actionEraser.setChecked(False)  # Ensure eraser is not active
                 self.tb_actionCursor.setChecked(False)
                 self.tb_actionHighlighter.setChecked(False)
@@ -194,14 +319,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.tb_actionHighlighter.isChecked():
                 # Enable highlighter mode, disable pen & eraser
                 print("Highlighter activated")  # Debugging print
-                self.scene.set_active_tool("highlighter")
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("highlighter")
                 self.tb_actionPen.setChecked(False)  # Ensure pen is not active
                 self.tb_actionCursor.setChecked(False)
                 self.tb_actionEraser.setChecked(False)
             else:
                 # Deactivate erasing mode when button is clicked again
                 print("Highlighter deactivated")  # Debugging print
-                self.scene.set_active_tool(None)
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool(None)
+        elif sender_button == self.tb_actionText:
+            if self.tb_actionText.isChecked():
+                # Enable highlighter mode, disable pen & eraser
+                print("Textbox activated")  # Debugging print
+                self.tabWidget.currentWidget().findChild(QGraphicsView, 'gv_Canvas').scene().set_active_tool("highlighter")
+                self.tb_actionPen.setChecked(False)  # Ensure pen is not active
+                self.tb_actionCursor.setChecked(False)
+                self.tb_actionEraser.setChecked(False)
 
     #Adds a text box using the method in BoardScene
     def create_text_box(self):
@@ -221,6 +354,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if enable:
             self.erasing_enabled = False
             self.drawing_enabled = False
+
+    def display_help_doc(self):
+        path = os.getcwd()
+        path += "\\PDFs\\Help_Document.pdf"
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def save(self):
         directory, _filter = QFileDialog.getSaveFileName(self, "Save as Pickle", '', "Pickle (*.pkl)")
@@ -421,278 +559,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         NewNotebook.get_canvas(NewNotebook).setScene(self.scene)
         NewNotebook.get_canvas(NewNotebook).setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-    # Function to load the config file
-    def load_config(self):
-        """Load configuration from a JSON file based on the project directory"""
-        try:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-
-            # Traverse up to find the project root directory
-            project_root = current_dir
-            while not os.path.exists(os.path.join(project_root, 'config.json')):
-                project_root = os.path.dirname(project_root)
-                if project_root == os.path.dirname(project_root):
-                    raise FileNotFoundError("config.json not found in the project directory.")
-
-            print(f"Main.py Project root path: {project_root}")
-            config_path = os.path.join(project_root, 'config.json')
-            print(f"Main.py config path: {config_path}\n")
-
-            # Load the config file
-            with open(config_path, 'r') as config_file:
-                config = json.load(config_file)
-
-            ssl_key_path = config.get('ssl_key_path', 'ssl/server.key')
-            ssl_cert_path = config.get('ssl_cert_path', 'ssl/server.crt')
-
-            ssl_key_path = os.path.join(project_root, ssl_key_path)
-            ssl_cert_path = os.path.join(project_root, ssl_cert_path)
-
-            if not os.path.exists(ssl_key_path):
-                raise FileNotFoundError(f"SSL key file not found: {ssl_key_path}")
-            if not os.path.exists(ssl_cert_path):
-                raise FileNotFoundError(f"SSL certificate file not found: {ssl_cert_path}")
-
-            config['ssl_key_path'] = ssl_key_path
-            config['ssl_cert_path'] = ssl_cert_path
-
-            return config
-        except FileNotFoundError as e:
-            print(f"Error: {str(e)}")
-            return {}
-        except json.JSONDecodeError:
-            print("Error: Failed to decode JSON from the config file.")
-            return {}
-
-    # Function to load SSL key and certificate
-    def load_ssl_files(self, ssl_key_path, ssl_cert_path):
-        """Load SSL key and certificate from files"""
-        try:
-            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            ssl_context.load_cert_chain(certfile=ssl_cert_path, keyfile=ssl_key_path)
-            return ssl_context, None
-        except Exception as e:
-            print(f"Error loading SSL files: {str(e)}")
-            return None, None
-
-    # Function to host a collaborative session
-    def host_session(self):
-        dialog = HostDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            username = dialog.get_username()
-            if not self.user_db.user_exists(username):
-                self.user_db.add_user(username)
-
-            self.username = username
-            port = self.user_reg.register_host(username)
-
-            self.collab_server = CollabServer()
-            self.collab_server.port = port
-
-            try:
-                # Load SSL configuration
-                config = self.load_config()
-                ssl_key_path = config.get('ssl_key_path', '')
-                ssl_cert_path = config.get('ssl_cert_path', '')
-
-                if not ssl_key_path or not ssl_cert_path:
-                    raise RuntimeError("SSL certificate or key path missing in configuration")
-
-                ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-                ssl_context.load_cert_chain(certfile=ssl_cert_path, keyfile=ssl_key_path)
-                self.collab_server.ssl_context = ssl_context
-
-                # Set the IP address to the real IP address of the host machine
-                host_ip = socket.gethostbyname(socket.gethostname())  # Get local IP address
-                self.collab_server.host_ip = host_ip
-                self.collab_server.start()
-
-                self.collab_server.clientConnected.connect(self._handle_client_connected)
-                self.collab_server.clientDisconnected.connect(self._handle_client_disconnected)
-
-                QMessageBox.information(self, "Success", "Successfully started hosting session")
-                print(f"Hosting on IP: {host_ip}, Port: {port}")
-                self.scene.change_color(QColor("#FF0000"))
-            except RuntimeError as e:
-                QMessageBox.warning(self, "Error", f"Could not start hosting: {str(e)}")
-                print(f"Could not host: {str(e)}")
-
-    # Function to join a collaborative session
-    def join_session(self):
-        dialog = JoinDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            username = dialog.get_username()
-            host_username = dialog.get_host_username()
-
-            if not self.user_db.user_exists(username):
-                self.user_db.add_user(username)
-
-            try:
-                # Get the IP and port of the host from user registration
-                host_address, port = self.user_reg.get_host_address(host_username)
-                self.username = username
-                self.collab_client = CollabClient(self)
-
-                if self.collab_client.connect_to_host(host_address, port, username):
-                    # Load SSL context for client-side secure connection
-                    config = self.load_config()
-                    ssl_key_path = config.get('ssl_key_path', '')
-                    ssl_cert_path = config.get('ssl_cert_path', '')
-
-                    if not ssl_key_path or not ssl_cert_path:
-                        raise RuntimeError("SSL certificate or key path missing in configuration")
-
-                    ssl_context, _ = self.load_ssl_files(ssl_key_path, ssl_cert_path)
-                    if not ssl_context:
-                        raise RuntimeError("Failed to load SSL context. Check the SSL configuration.")
-
-                    if self.collab_client.secure_connect(ssl_context):
-                        self.collab_client.drawingReceived.connect(self._handle_remote_drawing)
-                        QMessageBox.information(self, "Connected", "Successfully joined session")
-                        print(f"Joined session successfully. Host IP: {host_address}, Port: {port}")
-                        self.scene.change_color(QColor("#3600FF"))
-                    else:
-                        QMessageBox.warning(self, "Connection Failed", "Could not connect to host")
-                else:
-                    QMessageBox.warning(self, "Connection Failed", "Could not connect to host")
-            except ValueError:
-                QMessageBox.warning(self, "Host Not Found", f"No active session found for user {host_username}")
-
-    # Handle incoming data from the server
-    def handle_incoming_data(self, data):
-        parsed_data = json.loads(data)
-        if parsed_data['type'] == 'drawing':
-            self.scene.apply_remote_drawing(parsed_data['data'])
-
-    # Handle remote drawing received from another client
-    def _handle_remote_drawing(self, drawing_data: dict):
-        self.scene.apply_remote_drawing(drawing_data)
-
-    # Handle client connections
-    def _handle_client_connected(self, username: str):
-        QMessageBox.information(self, "User Joined", f"{username} joined the session")
-
-    # Handle client disconnections
-    def _handle_client_disconnected(self, username: str):
-        QMessageBox.information(self, "User Left", f"{username} left the session")
-
-    #Clean up when the window is closed
-    def closeEvent(self, event):
-        if hasattr(self, 'username'):
-            self.user_reg.remove_user(self.username)
-        super().closeEvent(event)
-
-    def start_server_after_login(self, username):
-        print(f"Starting collaborative server for user: {username}")
-        try:
-            # Configure and start the server here
-            self.collab_server = CollabServer()
-            self.collab_server.username = username
-
-            # Load SSL configuration if necessary
-            config = self.load_config()
-            ssl_key_path = config.get('ssl_key_path', '')
-            ssl_cert_path = config.get('ssl_cert_path', '')
-
-            if not ssl_key_path or not ssl_cert_path:
-                raise RuntimeError("SSL certificate or key path missing in configuration")
-
-            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            ssl_context.load_cert_chain(certfile=ssl_cert_path, keyfile=ssl_key_path)
-            self.collab_server.ssl_context = ssl_context
-
-            # Set the IP address to the real IP address of the host machine
-            host_ip = socket.gethostbyname(socket.gethostname())  # Get local IP address
-            self.collab_server.host_ip = host_ip
-            self.collab_server.start()
-
-            self.collab_server.clientConnected.connect(self._handle_client_connected)
-            self.collab_server.clientDisconnected.connect(self._handle_client_disconnected)
-
-            QMessageBox.information(self, "Success", "Successfully started hosting session")
-            print(f"Hosting on IP: {host_ip}")
-        except RuntimeError as e:
-            QMessageBox.warning(self, "Error", f"Could not start hosting: {str(e)}")
-            print(f"Could not host: {str(e)}")
-
-    '''
-    def host_session(self):
-        dialog = HostDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            username = dialog.get_username()
-            if not self.user_db.user_exists(username):
-                self.user_db.add_user(username)
-
-            self.username = username
-            port = self.user_reg.register_host(username)
-
-            self.collab_server = CollabServer(self)
-            try:
-                self.collab_server.start(port)
-                self.collab_server.clientConnected.connect(self._handle_client_connected)
-                self.collab_server.clientDisconnected.connect(self._handle_client_disconnected)
-                QMessageBox.information(self, "Success",
-                                        "Successfully started hosting session")
-                print("Hosted successfully")
-                self.scene.change_color(QColor("#FF0000"))
-            except RuntimeError as e:
-                QMessageBox.warning(self, "Error",
-                                    f"Could not start hosting: {str(e)}")
-                print("Could not host")
-
-    def join_session(self):
-        dialog = JoinDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            username = dialog.get_username()
-            host_username = dialog.get_host_username()
-
-            if not self.user_db.user_exists(username):
-                self.user_db.add_user(username)
-
-            try:
-                host_address, port = self.user_reg.get_host_address(host_username)
-                self.username = username
-                self.collab_client = CollabClient(self)
-
-                if self.collab_client.connect_to_host(host_address, port, username):
-                    self.collab_client.drawingReceived.connect(self._handle_remote_drawing)
-                    QMessageBox.information(self, "Connected",
-                                            "Successfully joined session")
-                    print("Joined session successfully")
-                    self.scene.change_color(QColor("#3600FF"))
-                else:
-                    QMessageBox.warning(self, "Connection Failed",
-                                        "Could not connect to host")
-            except ValueError:
-                QMessageBox.warning(self, "Host Not Found",
-                                    f"No active session found for user {host_username}")
-
-    def _handle_client_connected(self, username: str):
-        QMessageBox.information(self, "User Joined",
-                                f"{username} joined the session")
-
-    def _handle_client_disconnected(self, username: str):
-        QMessageBox.information(self, "User Left",
-                                f"{username} left the session")
-
-    def closeEvent(self, event):
-        # Clean up when the window is closed
-        if hasattr(self, 'username'):
-            self.user_reg.remove_user(self.username)
-        super().closeEvent(event)
-
-    def handle_incoming_data(self, data):
-        parsed_data = json.loads(data)
-        if parsed_data['type'] == 'drawing':
-            self.scene.apply_remote_drawing(parsed_data['data'])
-
-    def _handle_remote_drawing(self, drawing_data: dict):
-        # Update the canvas with remote drawing data
-        self.scene.apply_remote_drawing(drawing_data)
-    '''
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+
     window = MainWindow()
     window.show()
 

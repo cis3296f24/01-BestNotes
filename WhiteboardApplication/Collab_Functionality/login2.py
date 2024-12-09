@@ -7,7 +7,7 @@ import socket
 import time
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox
 from PySide6.QtGui import QFont, QPainter, QColor, QLinearGradient
-from WhiteboardApplication.main2 import MainWindow
+from WhiteboardApplication.main import MainWindow
 from WhiteboardApplication.Collab_Functionality.discover_server import start_discovery_server
 from WhiteboardApplication.Collab_Functionality.utils import ensure_discovery_server
 import logging

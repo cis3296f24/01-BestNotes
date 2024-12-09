@@ -10,40 +10,30 @@ from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPu
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QColor, QFont, QLinearGradient
 
-from WhiteboardApplication.main2 import MainWindow
+from WhiteboardApplication.main import MainWindow
 from WhiteboardApplication.board_scene import BoardScene
 
 
+# Load the configuration files
 with open('../../config.json', 'r') as f:
     config = json.load(f)
 
-# Get Firebase credentials from environment variable
-firebase_credentials_json = config.get('FIREBASE_CREDENTIALS_JSON')
+# Pass the entire firebase_credentials.json file directly
+firebase_credentials_path = '../../firebase_credentials.json'
+
 firebase_api_key = config.get('FIREBASE_API_WEB_KEY')
+
 # Initialize Firebase app using the credentials
-cred = credentials.Certificate(firebase_credentials_json)
+cred = credentials.Certificate(firebase_credentials_path)
+print(cred)
 firebase_app = initialize_app(cred, {
     'databaseURL': 'https://bestnotes-3e99f-default-rtdb.firebaseio.com/'
 })
 
-ref = db.reference('/users')
-print(ref.get())
+#ref = db.reference('/users')
+#print(ref.get())
 print("Made it here\n")
-print(f"Contents are: {firebase_api_key}\n")
-
-# Encrypts password with bcrypt
-def encrypt_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-# Verifies entered password against the stored hash
-def check_password(stored_hash, password):
-    try:
-        # Check if the entered password matches the stored hash
-        return bcrypt.checkpw(password.encode(), stored_hash.encode())
-    except Exception as e:
-        # General exception handler for unexpected errors
-        print(f"Error during password check: {e}")
-        return False
+#print(f"Contents are: {firebase_api_key}\n")
 
 # Login Window
 class LoginWindow(QWidget):

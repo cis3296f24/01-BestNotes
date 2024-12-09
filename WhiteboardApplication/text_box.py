@@ -2,10 +2,13 @@ from PySide6.QtWidgets import (
     QGraphicsTextItem, QGraphicsRectItem, QGraphicsItem, QColorDialog, QFontDialog, QMenu, QGraphicsItemGroup, QGraphicsEllipseItem
 )
 from PySide6.QtGui import QFont, QPen, QColor, QBrush
-from PySide6.QtCore import Qt, QPointF, QRectF
+from PySide6.QtCore import Qt, QPointF, QRectF, Signal
 from WhiteboardApplication.resize_handles import ResizeHandle
 
 class TextBox(QGraphicsTextItem):
+    contentChanged = Signal()
+    moved = Signal()
+
     def __init__(self):
         super().__init__()
 
@@ -21,6 +24,7 @@ class TextBox(QGraphicsTextItem):
 
         # Allow text editing within the box
         self.setTextInteractionFlags(Qt.TextEditorInteraction)
+        self.document().contentsChanged.connect(self.contentChanged.emit)
 
         # Create background rectangle
         self.background = QGraphicsRectItem(self)
@@ -107,6 +111,7 @@ class TextBox(QGraphicsTextItem):
         if not self.drawing_disabled:
             # Process move or drawing events only if drawing is enabled
             super().mouseMoveEvent(event)
+            self.moved.emit()
         else:
             event.ignore()
 

@@ -1,4 +1,5 @@
 {
   "ssl_key_path": "ssl/server.key",
-  "ssl_cert_path": "ssl/server.crt"
+  "ssl_cert_path": "ssl/server.crt",
+  "FIREBASE_API_WEB_KEY": "AIzaSyDf37VIp22CdbS-QfIO8gnVVfTsF-3t_5U"
 }

@@ -17,6 +17,7 @@ class BoardScene(QGraphicsScene):
         self.color = QColor("#000000")
         self.size = 1
         self.pathItem = None
+        self.sync = None
 
         # Highlighter
         self.path_highlighter = None
@@ -54,6 +55,10 @@ class BoardScene(QGraphicsScene):
 
     #Pops action of undo stack to undo, and adds it to redo in case user wants to redo the action
     def undo(self):
+        if self.sync:
+            print("Sync Undo\n")
+            self.sync.sync_undo()
+
         if not self.undo_list:
             print("Undo list is empty")
             return
@@ -70,6 +75,10 @@ class BoardScene(QGraphicsScene):
 
     #Pops an action off the redo stack and adds it back to undo to redo and action
     def redo(self):
+        if self.sync:
+            print("Sync Redo\n")
+            self.sync.sync_redo()
+
         if not self.redo_list:
             print("Redo list is empty")
             return
@@ -86,6 +95,14 @@ class BoardScene(QGraphicsScene):
 
     #Adds text box and resizing handles as a group so they are undone at once
     def add_text_box(self, text_box_item):
+        if self.sync:
+            self.sync.sync_textbox_create(text_box_item)
+            text_box_item.contentChanged.connect(
+                lambda: self.sync.sync_textbox_content(text_box_item)
+            )
+            text_box_item.moved.connect(
+                lambda: self.sync.sync_textbox_move(text_box_item)
+            )
         self.addItem(text_box_item)
         self.add_item_to_undo(text_box_item)  # For complex items, group with handles if needed
         print("TextBox added to scene:", text_box_item)
@@ -125,6 +142,9 @@ class BoardScene(QGraphicsScene):
 
     #A basic eraser, created as a hold so text box function could be implemented
     def erase(self, position):
+        if self.sync:
+            self.sync.sync_eraser(position)
+
         eraser_radius = 10
 
         #Creates a 20 x 20 rectangle, using the current position and moving further left and up to set the left corner of the rectangle
@@ -255,6 +275,10 @@ class BoardScene(QGraphicsScene):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton or event.button() == Qt.RightButton:
+            if self.drawing and self.pathItem and self.sync:
+                self.sync.sync_drawing(self.pathItem)
+            elif self.highlighting and self.pathItem_highlighter and self.sync:
+                self.sync.sync_drawing(self.pathItem_highlighter, True)
             if self.dragging_text_box:
                 print("Finished dragging box")
                 self.dragging_text_box = False
