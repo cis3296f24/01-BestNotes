@@ -2,6 +2,8 @@ import sys
 import os
 import bcrypt
 import requests
+import boto3
+import json
 import json
 import firebase_admin
 from firebase_admin import credentials, auth, db, initialize_app
@@ -13,12 +15,11 @@ from PySide6.QtGui import QPainter, QColor, QFont, QLinearGradient
 from WhiteboardApplication.main import MainWindow
 from WhiteboardApplication.board_scene import BoardScene
 
-
-# Load the configuration files
+#Load config files
 with open('../../config.json', 'r') as f:
     config = json.load(f)
 
-# Pass the entire firebase_credentials.json file directly
+#Pass the entire firebase_credentials.json file directly
 firebase_credentials_path = '../../firebase_credentials.json'
 
 firebase_api_key = config.get('FIREBASE_API_WEB_KEY')
@@ -30,8 +31,6 @@ firebase_app = initialize_app(cred, {
     'databaseURL': 'https://bestnotes-3e99f-default-rtdb.firebaseio.com/'
 })
 
-#ref = db.reference('/users')
-#print(ref.get())
 print("Made it here\n")
 #print(f"Contents are: {firebase_api_key}\n")
 
